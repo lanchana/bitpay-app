@@ -52,10 +52,13 @@ export const startCardStoreInit =
         .map(c => c.id);
 
       if (virtualCardIds.length) {
+        const homeCarouselConfig = APP.homeCarouselConfig.filter(
+          c => c.id !== 'bitpayCard',
+        );
         dispatch(startFetchVirtualCardImageUrls(virtualCardIds));
         dispatch(
           setHomeCarouselConfig([
-            ...APP.homeCarouselConfig,
+            ...homeCarouselConfig,
             {id: 'bitpayCard', show: true},
           ]),
         );
