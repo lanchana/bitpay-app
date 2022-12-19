@@ -21,6 +21,7 @@ export enum AppActionTypes {
   SUCCESS_APP_INIT = 'APP/SUCCESS_APP_INIT',
   APP_INIT_COMPLETE = 'APP/APP_INIT_COMPLETE',
   FAILED_APP_INIT = 'APP/FAILED_APP_INIT',
+  APP_READY_FOR_DEEPLINKING = 'APP/READY_FOR_DEEPLINKING',
   APP_OPENING_WAS_TRACKED = 'APP/OPENING_WAS_TRACKED',
   SET_APP_FIRST_OPEN_EVENT_COMPLETE = 'APP/SET_APP_FIRST_OPEN_EVENT_COMPLETE',
   SET_APP_FIRST_OPEN_DATE = 'APP/SET_APP_FIRST_OPEN_DATE',
@@ -72,6 +73,7 @@ export enum AppActionTypes {
   CHECKING_BIOMETRIC_FOR_SENDING = 'APP/CHECKING_BIOMETRIC_FOR_SENDING',
   UPDATE_ON_COMPLETE_ONBOARDING_LIST = 'APP/UPDATE_ON_COMPLETE_ONBOARDING_LIST',
   CLEAR_ON_COMPLETE_ONBOARDING_LIST = 'APP/CLEAR_ON_COMPLETE_ONBOARDING_LIST',
+  SET_HAS_VIEWED_ZENLEDGER_WARNING = 'APP/SET_HAS_VIEWED_ZENLEDGER_WARNING',
 }
 
 interface NetworkChanged {
@@ -90,6 +92,10 @@ interface AppInitComplete {
 interface FailedAppInit {
   type: typeof AppActionTypes.FAILED_APP_INIT;
   payload: boolean;
+}
+
+interface AppIsReadyForDeeplinking {
+  type: typeof AppActionTypes.APP_READY_FOR_DEEPLINKING;
 }
 
 interface setAppFirstOpenEventComplete {
@@ -330,11 +336,16 @@ interface clearOnCompleteOnboardingList {
   type: typeof AppActionTypes.CLEAR_ON_COMPLETE_ONBOARDING_LIST;
 }
 
+interface SetHasViewedZenLedgerWarning {
+  type: typeof AppActionTypes.SET_HAS_VIEWED_ZENLEDGER_WARNING;
+}
+
 export type AppActionType =
   | NetworkChanged
   | SuccessAppInit
   | AppInitComplete
   | FailedAppInit
+  | AppIsReadyForDeeplinking
   | setAppFirstOpenEventComplete
   | setAppFirstOpenDate
   | AppOpeningWasTracked
@@ -385,4 +396,5 @@ export type AppActionType =
   | ActiveModalUpdated
   | checkingBiometricForSending
   | updateOnCompleteOnboarding
-  | clearOnCompleteOnboardingList;
+  | clearOnCompleteOnboardingList
+  | SetHasViewedZenLedgerWarning;

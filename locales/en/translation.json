@@ -330,6 +330,7 @@
   "Payment Method": "Payment Method",
   "Close": "Close",
   "Provided by": "Provided by",
+  "There are no Moonpay offers available, as the current purchase limits for this exchange must be between and": "There are no Moonpay offers available, as the current purchase limits for this exchange must be between {{min}} {{fiatCurrency}} and {{max}} {{fiatCurrency}}",
   "There are no Simplex offers available, as the current purchase limits for this exchange must be between and": "There are no Simplex offers available, as the current purchase limits for this exchange must be between {{min}} {{fiatCurrency}} and {{max}} {{fiatCurrency}}",
   "Can't get rates at this moment. Please try again later": "Can't get rates at this moment. Please try again later",
   "Could not get crypto offer. Please try again later.": "Could not get crypto offer. Please try again later.",
@@ -1139,13 +1140,14 @@
   "To continue you will need to add a wallet to your key.": "To continue you will need to add a wallet to your key.",
   "Add wallet": "Add wallet",
   "Key and wallet required": "Key and wallet required",
-  "SelectArgCurrencies": "Select {{chain}} Currencies",
+  "SelectArgTokens": "Select {{chain}} Tokens",
   "PopularArgTokens": "Popular {{currency}} Tokens",
+  "AddArgWallets": "Add {{walletsLength}} Wallets",
   "AllArgTokens": "All {{currency}} Tokens",
   "ViewAllArgTokens": "View all {{currency}} tokens",
   "MinimizeArgTokens": "Minimize {{currency}} tokens",
   "TokensOnEthereumNetworkDescription": "Tokens on the Ethereum network need an Ethereum wallet to pay for fees.",
-  "TokensOnPolygonNetworkDescription": "Tokens on the Polygon network need an Polygon wallet to pay for fees.",
+  "TokensOnPolygonNetworkDescription": "Tokens on the Polygon network need a Polygon wallet to pay for fees.",
   "To continue you will need to create a key and add a wallet.": "To continue you will need to create a key and add a wallet.",
   "Required": "Required",
   "CannotUseSameCodeTwice": "Cannot use the same code twice.",
@@ -1158,5 +1160,7 @@
   "MustBeGreaterThanArgCharacters": "Must be greater than {{min}} characters",
   "IAgreeToTheArgAndArg": "I agree to the <0>{{0}}</0> and <1>{{1}}</1>.",
   "OrderPhysicalCard": "Order Physical Card",
-  "WalletConnectBannerConfirm": "Before proceeding, verify the <0>{{peerName}}</0> request is still waiting for confirmation."
+  "WalletConnectBannerConfirm": "Before proceeding, verify the <0>{{peerName}}</0> request is still waiting for confirmation.",
+  "MinAmountWarnMsg": "{{min}} {{currency}} minimum",
+  "MaxAmountWarnMsg": "{{max}} {{currency}} maximum"
 }

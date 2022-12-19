@@ -34,6 +34,10 @@ export const failedAppInit = (): AppActionType => ({
   payload: true,
 });
 
+export const appIsReadyForDeeplinking = (): AppActionType => ({
+  type: AppActionTypes.APP_READY_FOR_DEEPLINKING,
+});
+
 export const setAppFirstOpenEventComplete = (): AppActionType => ({
   type: AppActionTypes.SET_APP_FIRST_OPEN_EVENT_COMPLETE,
 });
@@ -311,4 +315,8 @@ export const updateOnCompleteOnboarding = (payload: string): AppActionType => ({
 
 export const clearOnCompleteOnboardingList = (): AppActionType => ({
   type: AppActionTypes.CLEAR_ON_COMPLETE_ONBOARDING_LIST,
+});
+
+export const setHasViewedZenLedgerWarning = (): AppActionType => ({
+  type: AppActionTypes.SET_HAS_VIEWED_ZENLEDGER_WARNING,
 });

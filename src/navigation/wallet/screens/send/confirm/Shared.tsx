@@ -101,6 +101,10 @@ export const ConfirmSubText = styled(H7)`
   color: ${({theme}) => (theme.dark ? LuckySevens : theme.colors.text)};
 `;
 
+export const SendToPillContainer = styled.View`
+  height: 37px;
+`;
+
 // Row UI
 export const Header = ({
   children,
@@ -535,7 +539,11 @@ export const WalletSelector = ({
         <WalletSelectMenuHeaderContainer currency={currency}>
           {currency ? (
             <WalletSelectMenuHeaderIconContainer>
-              <CurrencyIconAndBadge coin={currency} chain={chain} size={30} />
+              <CurrencyIconAndBadge
+                coin={currency}
+                chain={chain || ''}
+                size={30}
+              />
             </WalletSelectMenuHeaderIconContainer>
           ) : null}
           <H4>{t('Select a Wallet')}</H4>
@@ -588,4 +596,14 @@ export const CurrencyIconAndBadge = ({
       />
     </CurrencyImageAndBadgeContainer>
   );
+};
+
+export const ExchangeRate = ({
+  description,
+  rateStr,
+}: {
+  description: string;
+  rateStr: string;
+}): JSX.Element | null => {
+  return <SharedDetailRow description={description} value={rateStr} hr />;
 };

@@ -427,6 +427,8 @@ const RecoveryPhrase = () => {
   ): Promise<void> => {
     try {
       if (!derivationPathEnabled) {
+        startDeferredImport(importData, opts);
+        await sleep(500);
         dispatch(
           showBottomNotificationModal({
             type: 'wait',
@@ -438,9 +440,7 @@ const RecoveryPhrase = () => {
             actions: [
               {
                 text: t('GOT IT'),
-                action: () => {
-                  startDeferredImport(importData, opts);
-                },
+                action: () => {},
                 primary: true,
               },
             ],
@@ -458,6 +458,7 @@ const RecoveryPhrase = () => {
         )) as Key;
         await dispatch(startGetRates({}));
         await dispatch(startUpdateAllWalletStatusForKey({key, force: true}));
+        await sleep(1000);
         await dispatch(updatePortfolioBalance());
         dispatch(setHomeCarouselConfig({id: key.id, show: true}));
         backupRedirect({
@@ -529,6 +530,7 @@ const RecoveryPhrase = () => {
       const key = (await dispatch<any>(startCreateKeyWithOpts(keyOpts))) as Key;
       await dispatch(startGetRates({}));
       await dispatch(startUpdateAllWalletStatusForKey({key, force: true}));
+      await sleep(1000);
       await dispatch(updatePortfolioBalance());
 
       dispatch(setHomeCarouselConfig({id: key.id, show: true}));
