@@ -8,7 +8,6 @@ import {useMemo, useRef} from 'react';
 import {Linking} from 'react-native';
 import AppsFlyer from 'react-native-appsflyer';
 import InAppBrowser from 'react-native-inappbrowser-reborn';
-import {IS_IOS} from '../../constants';
 import {
   APP_CRYPTO_PREFIX,
   APP_DEEPLINK_PREFIX,
@@ -21,7 +20,6 @@ import {SwapCryptoScreens} from '../../navigation/services/swap-crypto/SwapCrypt
 import {CoinbaseScreens} from '../../navigation/coinbase/CoinbaseStack';
 import {navigationRef, RootStackParamList, RootStacks} from '../../Root';
 import {TabsScreens, TabsStackParamList} from '../../navigation/tabs/TabsStack';
-import {SettingsScreens} from '../../navigation/tabs/settings/SettingsStack';
 import {incomingData} from '../../store/scan/scan.effects';
 import {showBlur} from '../../store/app/app.actions';
 import {incomingLink} from '../../store/app/app.effects';
@@ -49,11 +47,6 @@ const getLinkingConfig = (): LinkingOptions<RootStackParamList>['config'] => ({
           initialRouteName: CardScreens.HOME,
           screens: {
             [CardScreens.PAIRING]: 'pairing',
-          },
-        },
-        [TabsScreens.SETTINGS]: {
-          screens: {
-            [SettingsScreens.Root]: 'connections/:redirectTo',
           },
         },
       },
@@ -172,12 +165,19 @@ export const useDeeplinks = () => {
   >(
     () => listener => {
       const subscription = Linking.addEventListener('url', async ({url}) => {
-        // For raw deeplinks (eg. bitpay://home), url will be the deeplink URL
-        // For OneLink links (eg. https://onelink.me/path/123), url will be the deeplink URL (Android) or the OneLink url itself (iOS).
         let handled = false;
+        const urlObj = new URL(url);
+        const urlParams = urlObj.searchParams;
 
-        // On iOS, raw deeplinks are not handled properly by the AppsFlyer SDK, so call the handler here.
-        if (IS_IOS && !handled) {
+        if (!handled) {
+          const isAppsFlyerDeeplink = urlParams.get('af_deeplink') === 'true';
+          const hasEmbeddedDeepLink = !!urlParams.get('deep_link_value');
+
+          // true if should be handled by AppsFlyer SDK
+          handled = !!(isAppsFlyerDeeplink && hasEmbeddedDeepLink);
+        }
+
+        if (!handled) {
           handled = !!(await urlEventHandler({url}));
         }
 
