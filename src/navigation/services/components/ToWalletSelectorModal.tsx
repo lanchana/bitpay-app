@@ -57,10 +57,7 @@ import {useTranslation} from 'react-i18next';
 import {findWalletById, toFiat} from '../../../store/wallet/utils/wallet';
 import {CurrencyImage} from '../../../components/currency-image/CurrencyImage';
 import NestedArrowIcon from '../../../components/nested-arrow/NestedArrow';
-import {
-  DESCRIPTIONS,
-  SearchContainer,
-} from '../../wallet/screens/CurrencySelection';
+import {SearchContainer} from '../../wallet/screens/CurrencySelection';
 import {
   createHomeCardList,
   keyBackupRequired,
@@ -285,6 +282,11 @@ const ToWalletSelectorModal: React.FC<ToWalletSelectorModalProps> = ({
   const [searchFilter, setSearchFilter] = useState('');
   const [walletSelectModalVisible, setWalletSelectModalVisible] =
     useState(false);
+
+  const DESCRIPTIONS: Record<string, string> = {
+    eth: t('TokensOnEthereumNetworkDescription'),
+    matic: t('TokensOnPolygonNetworkDescription'),
+  };
   // object to pass to select modal
   const [keyWallets, setKeysWallets] =
     useState<KeyWalletsRowProps<KeyWallet>[]>();
@@ -611,12 +613,12 @@ const ToWalletSelectorModal: React.FC<ToWalletSelectorModalProps> = ({
           <>
             {DESCRIPTIONS[currencyAbbreviation] ? (
               <DescriptionRow>
-                {t(DESCRIPTIONS[currencyAbbreviation])}
+                {DESCRIPTIONS[currencyAbbreviation]}
               </DescriptionRow>
             ) : null}
             {DESCRIPTIONS[currencyAbbreviation] ? (
               <TokensHeading>
-                {t('PopularArgTokens', {currency: t(currencyName)})}
+                {t('PopularArgTokens', {currency: currencyName})}
               </TokensHeading>
             ) : null}
           </>
@@ -667,8 +669,8 @@ const ToWalletSelectorModal: React.FC<ToWalletSelectorModalProps> = ({
                 onViewAllTokensPressed(item);
               }}>
               {viewAllChainSelected !== currencyAbbreviation
-                ? t('ViewAllArgTokens', {currency: t(currencyName)})
-                : t('MinimizeArgTokens', {currency: t(currencyName)})}
+                ? t('ViewAllArgTokens', {currency: currencyName})
+                : t('MinimizeArgTokens', {currency: currencyName})}
             </ViewAllLink>
           </TokensFooter>
         ) : null}

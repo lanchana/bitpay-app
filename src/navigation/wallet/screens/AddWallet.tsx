@@ -35,7 +35,6 @@ import {
   openUrlWithInAppBrowser,
   startOnGoingProcessModal,
 } from '../../../store/app/app.effects';
-import {OnGoingProcessMessages} from '../../../components/modal/ongoing-process/OngoingProcess';
 import {
   dismissBottomNotificationModal,
   dismissOnGoingProcessModal,
@@ -101,7 +100,6 @@ import {IsERCToken} from '../../../store/wallet/utils/currency';
 import {updatePortfolioBalance} from '../../../store/wallet/wallet.actions';
 import {LogActions} from '../../../store/log';
 import CurrencySelectionRow from '../../../components/list/CurrencySelectionRow';
-import {DESCRIPTIONS} from './CurrencySelection';
 import {CommonActions} from '@react-navigation/native';
 
 type AddWalletScreenProps = StackScreenProps<WalletStackParamList, 'AddWallet'>;
@@ -243,6 +241,11 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
     WalletRowProps | undefined
   >();
 
+  const DESCRIPTIONS: Record<string, string> = {
+    eth: t('TokensOnEthereumNetworkDescription'),
+    matic: t('TokensOnPolygonNetworkDescription'),
+  };
+
   const [
     showAssociatedWalletSelectionDropdown,
     setShowAssociatedWalletSelectionDropdown,
@@ -300,7 +303,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
       showBottomNotificationModal({
         type: 'info',
         title: t('Missing wallet'),
-        message: t(DESCRIPTIONS[chain]),
+        message: DESCRIPTIONS[chain],
         actions: [
           {
             primary: true,
@@ -398,9 +401,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
             isErc20Token: !!isToken,
           }),
         );
-        dispatch(
-          startOnGoingProcessModal(t(OnGoingProcessMessages.ADDING_WALLET)),
-        );
+        dispatch(startOnGoingProcessModal('ADDING_WALLET'));
         // adds wallet and binds to key obj - creates eth wallet if needed
         const wallet = await dispatch(
           addWallet({

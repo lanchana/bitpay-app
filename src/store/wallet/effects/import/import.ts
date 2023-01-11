@@ -12,6 +12,7 @@ import {
   buildKeyObj,
   buildMigrationKeyObj,
   buildWalletObj,
+  findKeyByKeyId,
   findMatchedKeyAndUpdate,
   getMatchedKey,
   getReadOnlyKey,
@@ -781,7 +782,7 @@ export const migrateKeyAndWallets =
   };
 
 export const deferredImportErrorNotification =
-  (e: any): Effect =>
+  (e?: any): Effect =>
   async dispatch => {
     dispatch(dismissOnGoingProcessModal());
     await sleep(600);
@@ -846,7 +847,7 @@ export const deferredImportMnemonic =
       const {words, xPrivKey} = importData;
       opts.words = normalizeMnemonic(words);
       opts.xPrivKey = xPrivKey;
-      await dispatch(serverAssistedImport(opts, context));
+      dispatch(serverAssistedImport(opts, context));
     } catch (e: any) {
       dispatch(onFailedDeferredImport(e));
     }
@@ -931,7 +932,7 @@ const onSuccessServerAssistedImport =
         }),
       );
 
-      await dispatch(startGetRates({}));
+      await dispatch(startGetRates({force: true})); // Force getRates function to get rates for new tokens if exists
       await dispatch(startUpdateAllWalletStatusForKey({key, force: true}));
       await sleep(1000);
       dispatch(updatePortfolioBalance());
@@ -1149,19 +1150,41 @@ export const startImportWithDerivationPath =
               wallet.credentials.chain,
             ),
           );
-          const key = buildKeyObj({
-            key: _key,
-            wallets: [
+
+          let key;
+          const matchedKey = getMatchedKey(_key, Object.values(WALLET.keys));
+          if (matchedKey) {
+            // To avoid duplicate key creation when importing
+            wallet.credentials.keyId = wallet.keyId = matchedKey.id;
+            key = await findKeyByKeyId(matchedKey.id, WALLET.keys);
+            key.wallets.push(
               merge(
                 wallet,
                 buildWalletObj(
-                  {...wallet.credentials, currencyAbbreviation, currencyName},
+                  {
+                    ...wallet.credentials,
+                    currencyAbbreviation,
+                    currencyName,
+                  },
                   tokenOpts,
                 ),
               ),
-            ],
-            backupComplete: true,
-          });
+            );
+          } else {
+            key = buildKeyObj({
+              key: _key,
+              wallets: [
+                merge(
+                  wallet,
+                  buildWalletObj(
+                    {...wallet.credentials, currencyAbbreviation, currencyName},
+                    tokenOpts,
+                  ),
+                ),
+              ],
+              backupComplete: true,
+            });
+          }
           dispatch(
             successImport({
               key,
