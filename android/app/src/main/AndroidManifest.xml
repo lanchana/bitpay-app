@@ -22,7 +22,8 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:allowBackup="false"
         android:theme="@style/AppTheme"
-        android:networkSecurityConfig="@xml/network_security_config">
+        android:networkSecurityConfig="@xml/network_security_config"
+        android:requestLegacyExternalStorage="true">
 
         <activity
             android:name=".LaunchActivity"
@@ -59,6 +60,10 @@
         <meta-data
             android:name="com.google.android.gms.wallet.api.enabled"
             android:value="true" />
+        
+        <meta-data
+            android:name="AllowedUrlPrefixes"
+            android:value="ALLOWED-URL-PREFIXES-REPLACE-ME" />
 
         <activity
             android:screenOrientation="portrait"

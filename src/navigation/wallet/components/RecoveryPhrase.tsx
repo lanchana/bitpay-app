@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useState} from 'react';
+import React, {useCallback, useEffect, useMemo, useState} from 'react';
 import styled from 'styled-components/native';
 import {
   Caution,
@@ -38,25 +38,23 @@ import {
   H4,
   ImportTitle,
   Paragraph,
+  Small,
   TextAlign,
 } from '../../../components/styled/Text';
 import BoxInput from '../../../components/form/BoxInput';
 import {useLogger} from '../../../utils/hooks/useLogger';
 import {Key, KeyOptions} from '../../../store/wallet/wallet.models';
 import {
-  deferredImportMnemonic,
   startCreateKeyWithOpts,
   startGetRates,
+  startImportMnemonic,
   startImportWithDerivationPath,
 } from '../../../store/wallet/effects';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import {ImportObj} from '../../../store/scan/scan.models';
 import {RouteProp} from '@react-navigation/core';
 import {WalletStackParamList} from '../WalletStack';
-import {
-  logSegmentEvent,
-  startOnGoingProcessModal,
-} from '../../../store/app/app.effects';
+import {startOnGoingProcessModal} from '../../../store/app/app.effects';
 import {backupRedirect} from '../screens/Backup';
 import {RootState} from '../../../store';
 import Haptic from '../../../components/haptic-feedback/haptic';
@@ -87,6 +85,7 @@ import {
 } from '../../../store/wallet/utils/currency';
 import {useTranslation} from 'react-i18next';
 import {KeyboardAwareScrollView} from 'react-native-keyboard-aware-scroll-view';
+import {Analytics} from '../../../store/analytics/analytics.effects';
 
 const ScrollViewContainer = styled(KeyboardAwareScrollView)`
   margin-top: 20px;
@@ -106,6 +105,11 @@ const ErrorText = styled(BaseText)`
   font-size: 12px;
   font-weight: 500;
   padding: 5px 0 0 10px;
+`;
+
+const CuationText = styled(Small)`
+  padding: 5px 0 0 0px;
+  color: ${({theme: {dark}}) => (dark ? White : SlateDark)};
 `;
 
 const schema = yup.object().shape({
@@ -190,7 +194,8 @@ const RecoveryPhrase = () => {
   const [currencyModalVisible, setCurrencyModalVisible] = useState(false);
   const [selectedCurrency, setSelectedCurrency] = useState(CurrencyOptions[0]);
   const [recreateWallet, setRecreateWallet] = useState(false);
-
+  const [includeTestnetWallets, setIncludeTestnetWallets] = useState(false);
+  const [includeLegacyWallets, setIncludeLegacyWallets] = useState(false);
   const [advancedOptions, setAdvancedOptions] = useState({
     derivationPath: DefaultDerivationPath.defaultBTC as string,
     coin: CurrencyOptions[0].currencyAbbreviation,
@@ -375,6 +380,9 @@ const RecoveryPhrase = () => {
 
     let keyOpts: Partial<KeyOptions> = {};
 
+    keyOpts.includeTestnetWallets = includeTestnetWallets;
+    keyOpts.includeLegacyWallets = includeLegacyWallets;
+
     try {
       setKeyOptions(keyOpts, advancedOptions);
     } catch (e: any) {
@@ -397,77 +405,35 @@ const RecoveryPhrase = () => {
     }
   };
 
-  const startDeferredImport = async (
-    importData: {words?: string | undefined; xPrivKey?: string | undefined},
-    opts: Partial<KeyOptions>,
-  ) => {
-    await sleep(0);
-    dispatch(startOnGoingProcessModal('REDIRECTING'));
-    await sleep(350);
-
-    let _context = route.params?.context;
-    if (_context !== 'onboarding') {
-      _context = 'deferredImport';
-    }
-
-    dispatch(deferredImportMnemonic(importData, opts, _context));
-    dispatch(dismissOnGoingProcessModal());
-    backupRedirect({
-      context: _context,
-      navigation,
-      walletTermsAccepted,
-    });
-  };
-
   const importWallet = async (
     importData: {words?: string | undefined; xPrivKey?: string | undefined},
     opts: Partial<KeyOptions>,
   ): Promise<void> => {
     try {
-      if (!derivationPathEnabled) {
-        startDeferredImport(importData, opts);
-        await sleep(500);
-        dispatch(
-          showBottomNotificationModal({
-            type: 'wait',
-            title: t('Please wait'),
-            message: t(
-              'Your key is still being imported and will be available shortly. ',
-            ),
-            enableBackdropDismiss: false,
-            actions: [
-              {
-                text: t('GOT IT'),
-                action: () => {},
-                primary: true,
-              },
-            ],
-          }),
-        );
-      } else {
-        await dispatch(startOnGoingProcessModal('IMPORTING'));
-        const key = (await dispatch<any>(
-          startImportWithDerivationPath(importData, opts),
-        )) as Key;
-        await dispatch(startGetRates({}));
-        await dispatch(startUpdateAllWalletStatusForKey({key, force: true}));
-        await sleep(1000);
-        await dispatch(updatePortfolioBalance());
-        dispatch(setHomeCarouselConfig({id: key.id, show: true}));
-        backupRedirect({
-          context: route.params?.context,
-          navigation,
-          walletTermsAccepted,
-          key,
-        });
-        dispatch(
-          logSegmentEvent('track', 'Imported Key', {
-            context: route.params?.context || '',
-            source: 'RecoveryPhrase',
-          }),
-        );
-        dispatch(dismissOnGoingProcessModal());
-      }
+      dispatch(startOnGoingProcessModal('IMPORTING'));
+      await sleep(1000);
+      const key = !derivationPathEnabled
+        ? ((await dispatch<any>(startImportMnemonic(importData, opts))) as Key)
+        : ((await dispatch<any>(
+            startImportWithDerivationPath(importData, opts),
+          )) as Key);
+      await dispatch(startGetRates({}));
+      await dispatch(startUpdateAllWalletStatusForKey({key, force: true}));
+      await dispatch(updatePortfolioBalance());
+      dispatch(setHomeCarouselConfig({id: key.id, show: true}));
+      backupRedirect({
+        context: route.params?.context,
+        navigation,
+        walletTermsAccepted,
+        key,
+      });
+      dispatch(
+        Analytics.track('Imported Key', {
+          context: route.params?.context || '',
+          source: 'RecoveryPhrase',
+        }),
+      );
+      dispatch(dismissOnGoingProcessModal());
     } catch (e: any) {
       logger.error(e.message);
       dispatch(dismissOnGoingProcessModal());
@@ -595,6 +561,7 @@ const RecoveryPhrase = () => {
 
   return (
     <ScrollViewContainer
+      accessibilityLabel="recovery-phrase-view"
       extraScrollHeight={90}
       keyboardShouldPersistTaps={'handled'}>
       <ContentView keyboardShouldPersistTaps={'handled'}>
@@ -608,10 +575,11 @@ const RecoveryPhrase = () => {
           <ImportTitle>{t('Recovery phrase')}</ImportTitle>
 
           <ScanContainer
+            accessibilityLabel="scan-button"
             activeOpacity={ActiveOpacity}
             onPress={() => {
               dispatch(
-                logSegmentEvent('track', 'Open Scanner', {
+                Analytics.track('Open Scanner', {
                   context: 'RecoveryPhrase',
                 }),
               );
@@ -632,6 +600,7 @@ const RecoveryPhrase = () => {
           control={control}
           render={({field: {onChange, onBlur, value}}) => (
             <ImportTextInput
+              accessibilityLabel="import-text-input"
               multiline
               autoCapitalize={'none'}
               numberOfLines={3}
@@ -649,9 +618,13 @@ const RecoveryPhrase = () => {
 
         {errors.text?.message && <ErrorText>{errors.text.message}</ErrorText>}
 
+        <CuationText>
+          {t('This process may take a few minutes to complete.')}
+        </CuationText>
         <CtaContainer>
-          <AdvancedOptionsContainer>
+          <AdvancedOptionsContainer accessibilityLabel="advanced-options-container">
             <AdvancedOptionsButton
+              accessibilityLabel="show-advanced-options"
               onPress={() => {
                 Haptic('impactLight');
                 setShowAdvancedOptions(!showAdvancedOptions);
@@ -673,6 +646,50 @@ const RecoveryPhrase = () => {
               )}
             </AdvancedOptionsButton>
 
+            {showAdvancedOptions && !derivationPathEnabled && (
+              <AdvancedOptions>
+                <RowContainer
+                  activeOpacity={1}
+                  onPress={() => {
+                    setIncludeTestnetWallets(!includeTestnetWallets);
+                  }}>
+                  <Column>
+                    <OptionTitle>{t('Include Testnet Wallets')}</OptionTitle>
+                  </Column>
+                  <CheckBoxContainer accessibilityLabel="include-testnet-wallet-checkbox">
+                    <Checkbox
+                      checked={includeTestnetWallets}
+                      onPress={() => {
+                        setIncludeTestnetWallets(!includeTestnetWallets);
+                      }}
+                    />
+                  </CheckBoxContainer>
+                </RowContainer>
+              </AdvancedOptions>
+            )}
+
+            {showAdvancedOptions && !derivationPathEnabled && (
+              <AdvancedOptions>
+                <RowContainer
+                  activeOpacity={1}
+                  onPress={() => {
+                    setIncludeLegacyWallets(!includeLegacyWallets);
+                  }}>
+                  <Column>
+                    <OptionTitle>{t('Include Legacy Wallets')}</OptionTitle>
+                  </Column>
+                  <CheckBoxContainer accessibilityLabel="include-legacy-wallet-checkbox">
+                    <Checkbox
+                      checked={includeLegacyWallets}
+                      onPress={() => {
+                        setIncludeLegacyWallets(!includeLegacyWallets);
+                      }}
+                    />
+                  </CheckBoxContainer>
+                </RowContainer>
+              </AdvancedOptions>
+            )}
+
             {showAdvancedOptions && (
               <AdvancedOptions>
                 <RowContainer
@@ -683,7 +700,7 @@ const RecoveryPhrase = () => {
                   <Column>
                     <OptionTitle>{t('Specify Derivation Path')}</OptionTitle>
                   </Column>
-                  <CheckBoxContainer>
+                  <CheckBoxContainer accessibilityLabel="specify-derivation-path-checkbox">
                     <Checkbox
                       checked={derivationPathEnabled}
                       onPress={() => {
@@ -700,6 +717,7 @@ const RecoveryPhrase = () => {
                 <CurrencySelectorContainer>
                   <Label>{t('CURRENCY')}</Label>
                   <CurrencyContainer
+                    accessibilityLabel="currency-container"
                     activeOpacity={ActiveOpacity}
                     onPress={() => {
                       setCurrencyModalVisible(true);
@@ -742,6 +760,7 @@ const RecoveryPhrase = () => {
               <AdvancedOptions>
                 <InputContainer>
                   <BoxInput
+                    accessibilityLabel="derivation-path-box-input"
                     label={'DERIVATION PATH'}
                     onChangeText={(text: string) =>
                       setAdvancedOptions({
@@ -771,7 +790,7 @@ const RecoveryPhrase = () => {
                     <Column>
                       <OptionTitle>{t('Shared Wallet')}</OptionTitle>
                     </Column>
-                    <CheckBoxContainer>
+                    <CheckBoxContainer accessibilityLabel="shared-wallet-checkbox">
                       <Checkbox
                         checked={advancedOptions.isMultisig}
                         onPress={() => {
@@ -790,6 +809,7 @@ const RecoveryPhrase = () => {
               <AdvancedOptions>
                 <InputContainer>
                   <BoxInput
+                    accessibilityLabel="password-input-box"
                     placeholder={'strongPassword123'}
                     type={'password'}
                     onChangeText={(text: string) =>
@@ -808,7 +828,10 @@ const RecoveryPhrase = () => {
           </AdvancedOptionsContainer>
         </CtaContainer>
 
-        <Button buttonStyle={'primary'} onPress={handleSubmit(onSubmit)}>
+        <Button
+          accessibilityLabel="import-wallet-button"
+          buttonStyle={'primary'}
+          onPress={handleSubmit(onSubmit)}>
           {t('Import Wallet')}
         </Button>
       </ContentView>

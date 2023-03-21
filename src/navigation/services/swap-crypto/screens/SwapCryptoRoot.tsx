@@ -63,7 +63,6 @@ import {changellyGetCurrencies} from '../../../../store/swap-crypto/effects/chan
 import {
   startOnGoingProcessModal,
   openUrlWithInAppBrowser,
-  logSegmentEvent,
 } from '../../../../store/app/app.effects';
 import {
   dismissOnGoingProcessModal,
@@ -91,6 +90,14 @@ import SwapCryptoLoadingWalletSkeleton from './SwapCryptoLoadingWalletSkeleton';
 import SwapCryptoBalanceSkeleton from './SwapCryptoBalanceSkeleton';
 import BalanceDetailsModal from '../../../wallet/components/BalanceDetailsModal';
 import {buildUIFormattedWallet} from '../../../wallet/screens/KeyOverview';
+import {
+  ExternalServicesConfig,
+  ExternalServicesConfigRequestParams,
+  SwapCryptoConfig,
+} from '../../../../store/external-services/external-services.types';
+import {getExternalServicesConfig} from '../../../../store/external-services/external-services.effects';
+import {StackActions} from '@react-navigation/native';
+import {Analytics} from '../../../../store/analytics/analytics.effects';
 
 export interface RateData {
   fixedRateId: string;
@@ -132,6 +139,8 @@ export const getChainFromChangellyProtocol = (
   }
 };
 
+let swapCryptoConfig: SwapCryptoConfig | undefined;
+
 const SwapCryptoRoot: React.FC = () => {
   const {t} = useTranslation();
   const theme = useTheme();
@@ -139,7 +148,7 @@ const SwapCryptoRoot: React.FC = () => {
   const dispatch = useAppDispatch();
   const logger = useLogger();
   const keys = useAppSelector(({WALLET}) => WALLET.keys);
-  const countryData = useAppSelector(({LOCATION}) => LOCATION.countryData);
+  const locationData = useAppSelector(({LOCATION}) => LOCATION.locationData);
   const tokenData = useAppSelector(({WALLET}) => WALLET.tokenData);
   const tokenOptions = useAppSelector(({WALLET}) => WALLET.tokenOptions);
   const {rates} = useAppSelector(({RATE}) => RATE);
@@ -723,7 +732,7 @@ const SwapCryptoRoot: React.FC = () => {
 
   const continueToCheckout = () => {
     dispatch(
-      logSegmentEvent('track', 'Requested Swap Crypto', {
+      Analytics.track('Requested Swap Crypto', {
         fromCoin: fromWalletSelected!.currencyAbbreviation,
         fromChain: fromWalletSelected!.chain,
         toCoin: toWalletSelected!.currencyAbbreviation,
@@ -826,7 +835,7 @@ const SwapCryptoRoot: React.FC = () => {
             }) => {
               const chain = getChainFromChangellyProtocol(name, protocol);
               return {
-                currencyAbbreviation: name,
+                currencyAbbreviation: name.toLowerCase(),
                 symbol: getCurrencyAbbreviation(name, chain),
                 name: fullName,
                 chain,
@@ -869,7 +878,7 @@ const SwapCryptoRoot: React.FC = () => {
       }
 
       const coinsToRemove =
-        !countryData || countryData.shortCode === 'US' ? ['xrp'] : [];
+        !locationData || locationData.countryShortCode === 'US' ? ['xrp'] : [];
       if (selectedWallet?.balance?.satSpendable === 0) {
         coinsToRemove.push(selectedWallet.currencyAbbreviation.toLowerCase());
       }
@@ -906,8 +915,54 @@ const SwapCryptoRoot: React.FC = () => {
   };
 
   const init = async () => {
+    dispatch(startOnGoingProcessModal('GENERAL_AWAITING'));
+
     try {
-      dispatch(startOnGoingProcessModal('GENERAL_AWAITING'));
+      const requestData: ExternalServicesConfigRequestParams = {
+        currentLocationCountry: locationData?.countryShortCode,
+        currentLocationState: locationData?.stateShortCode,
+      };
+      const config: ExternalServicesConfig = await getExternalServicesConfig(
+        requestData,
+      );
+      swapCryptoConfig = config?.swapCrypto;
+      logger.debug('swapCryptoConfig: ' + JSON.stringify(swapCryptoConfig));
+    } catch (err) {
+      logger.error('getSwapCryptoConfig Error: ' + JSON.stringify(err));
+    }
+
+    if (swapCryptoConfig?.disabled) {
+      dispatch(dismissOnGoingProcessModal());
+      await sleep(600);
+      dispatch(
+        AppActions.showBottomNotificationModal({
+          title: swapCryptoConfig?.disabledTitle
+            ? swapCryptoConfig.disabledTitle
+            : t('Out of service'),
+          message: swapCryptoConfig?.disabledMessage
+            ? swapCryptoConfig.disabledMessage
+            : t(
+                'This feature is temporarily out of service. Please try again later.',
+              ),
+          type: 'warning',
+          actions: [
+            {
+              text: t('OK'),
+              action: () => {
+                navigation.dispatch(StackActions.popToTop());
+              },
+            },
+          ],
+          enableBackdropDismiss: true,
+          onBackdropDismiss: () => {
+            navigation.dispatch(StackActions.popToTop());
+          },
+        }),
+      );
+      return;
+    }
+
+    try {
       await Promise.all([getChangellyCurrencies(), sleep(400)]);
     } catch (err) {
       logger.error('Changelly getCurrencies Error: ' + JSON.stringify(err));
@@ -1261,7 +1316,7 @@ const SwapCryptoRoot: React.FC = () => {
                 `Added ${createdToWallet?.currencyAbbreviation} wallet from Swap Crypto`,
               );
               dispatch(
-                logSegmentEvent('track', 'Created Basic Wallet', {
+                Analytics.track('Created Basic Wallet', {
                   coin: createToWalletData.currency.currencyAbbreviation,
                   chain: createToWalletData.currency.chain,
                   isErc20Token: createToWalletData.currency.isToken,

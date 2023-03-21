@@ -1,5 +1,5 @@
 import {createTransform} from 'redux-persist';
-import {Key} from '../wallet/wallet.models';
+import {Key, Wallet} from '../wallet/wallet.models';
 import merge from 'lodash.merge';
 import {BwcProvider} from '../../lib/bwc';
 import {
@@ -9,33 +9,18 @@ import {
 import Flatted from 'flatted';
 import {buildWalletObj} from '../wallet/utils/wallet';
 import {ContactRowProps} from '../../components/list/ContactRow';
+import {AddLog} from '../log/log.types';
+import {LogActions} from '../log';
 const BWCProvider = BwcProvider.getInstance();
+const initLogs: AddLog[] = [];
 
-export const bindWalletClient = createTransform(
-  // transform state on its way to being serialized and persisted.
-  inboundState => {
-    const newInboundState: {[key in string]: any} = {};
-    for (const [id, key] of Object.entries(
-      inboundState as {[key in string]: Key},
-    )) {
-      const wallets = key.wallets.map(wallet => ({
-        ...wallet,
-        transactionHistory: undefined,
-      }));
-      newInboundState[id] = {
-        ...key,
-        wallets,
-      };
-    }
-    return newInboundState;
-  },
-  // transform state being rehydrated
-  _outboundState => {
-    const outboundState: {[key in string]: Key} = {};
-    for (const [id, key] of Object.entries(
-      _outboundState as {[key in string]: Key},
-    )) {
-      const wallets = key.wallets.map(wallet => {
+export const bootstrapWallets = (
+  wallets: Wallet[],
+  logHandler: (addLog: AddLog) => {},
+) => {
+  return wallets
+    .map(wallet => {
+      try {
         // reset transaction history
         wallet.transactionHistory = {
           transactions: [],
@@ -45,7 +30,8 @@ export const bindWalletClient = createTransform(
         const walletClient = BWCProvider.getClient(
           JSON.stringify(wallet.credentials),
         );
-        console.log(`bindWalletClient - ${wallet.id}`);
+        const successLog = `bindWalletClient - ${wallet.id}`;
+        logHandler(LogActions.info(successLog));
         // build wallet obj with bwc client credentials
         return merge(
           walletClient,
@@ -55,43 +41,105 @@ export const bindWalletClient = createTransform(
             ...wallet,
           }),
         );
-      });
+      } catch (err: unknown) {
+        const errStr = err instanceof Error ? err.message : JSON.stringify(err);
+        const errorLog = `Failed to bindWalletClient - ${wallet.id} - ${errStr}`;
+        logHandler(LogActions.persistLog(LogActions.error(errorLog)));
+      }
+    })
+    .filter(w => w !== undefined);
+};
 
-      outboundState[id] = {
-        ...key,
-        wallets,
-      };
+export const bootstrapKey = (
+  key: Key,
+  id: string,
+  logHandler: (addLog: AddLog) => {},
+) => {
+  if (id === 'readonly') {
+    return key;
+  } else {
+    try {
+      const _key = merge(key, {
+        methods: BWCProvider.createKey({
+          seedType: 'object',
+          seedData: key.properties,
+        }),
+      });
+      const successLog = `bindKey - ${id}`;
+      logHandler(LogActions.info(successLog));
+      return _key;
+    } catch (err: unknown) {
+      const errStr = err instanceof Error ? err.message : JSON.stringify(err);
+      const errorLog = `Failed to bindWalletKeys - ${id} - ${errStr}`;
+      logHandler(LogActions.persistLog(LogActions.error(errorLog)));
     }
-    return outboundState;
+  }
+};
+
+export const bindWalletClient = createTransform(
+  // transform state on its way to being serialized and persisted.
+  (inboundState, k) => {
+    if (k === 'keys') {
+      const newInboundState: {[key in string]: any} = {};
+      for (const [id, key] of Object.entries(
+        inboundState as {[key in string]: Key},
+      )) {
+        const wallets = key.wallets.map(wallet => ({
+          ...wallet,
+          transactionHistory: undefined,
+        }));
+        newInboundState[id] = {
+          ...key,
+          wallets,
+        };
+      }
+      return newInboundState;
+    }
+    return inboundState;
   },
-  {whitelist: ['keys']},
+  // transform state being rehydrated
+  (_outboundState, k) => {
+    const outboundState: {[key in string]: Key} = {};
+    if (k === 'keys') {
+      for (const [id, key] of Object.entries(
+        _outboundState as {[key in string]: Key},
+      )) {
+        const wallets = bootstrapWallets(key.wallets, log =>
+          initLogs.push(log),
+        );
+        outboundState[id] = {
+          ...key,
+          // @ts-ignore
+          wallets,
+        };
+      }
+      return outboundState;
+    } else if (k === 'initLogs') {
+      return initLogs;
+    }
+  },
+  {whitelist: ['keys', 'initLogs']},
 );
 
 export const bindWalletKeys = createTransform(
   inboundState => inboundState,
   (_outboundState, k) => {
+    let outboundState: {[key in string]: Key} = {};
     if (k === 'keys') {
-      const outboundState: {[key in string]: Key} = {};
       for (const [id, key] of Object.entries(
         _outboundState as {[key in string]: Key},
       )) {
-        if (id === 'readonly') {
-          // read only wallet
-          outboundState[id] = key;
-        } else {
-          outboundState[id] = merge(key, {
-            methods: BWCProvider.createKey({
-              seedType: 'object',
-              seedData: key.properties,
-            }),
-          });
+        const bootstrapedKey = bootstrapKey(key, id, log => initLogs.push(log));
+        if (bootstrapedKey) {
+          outboundState[id] = bootstrapedKey;
         }
-        console.log(`bindKey - ${id}`);
       }
       return outboundState;
+    } else if (k === 'initLogs') {
+      return initLogs;
     }
-    return _outboundState;
   },
+  {whitelist: ['keys', 'initLogs']},
 );
 
 export const transformCircular = createTransform(

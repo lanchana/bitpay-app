@@ -24,7 +24,10 @@ import {
   sleep,
 } from '../../../../../utils/helper-methods';
 import {WalletsAndAccounts} from '../../../../../store/wallet/utils/wallet';
-import {WalletRowProps} from '../../../../../components/list/WalletRow';
+import {
+  buildTestBadge,
+  WalletRowProps,
+} from '../../../../../components/list/WalletRow';
 import KeyWalletsRow, {
   KeyWallet,
 } from '../../../../../components/list/KeyWalletsRow';
@@ -321,12 +324,16 @@ export const Amount = ({
   fiatOnly,
   height,
   hr,
+  chain,
+  network,
 }: {
   description: string | undefined;
   amount: TxDetailsAmount | undefined;
   fiatOnly?: boolean;
   height?: number;
   hr?: boolean;
+  chain?: string | undefined;
+  network?: string | undefined;
 }): JSX.Element | null => {
   if (amount && description) {
     const {cryptoAmount, fiatAmount} = amount;
@@ -345,7 +352,13 @@ export const Amount = ({
               ) : (
                 <>
                   <H4>{cryptoAmount}</H4>
-                  <ConfirmSubText>{fiatAmount}</ConfirmSubText>
+                  {network &&
+                  !['livenet', 'mainnet'].includes(network) &&
+                  chain ? (
+                    buildTestBadge(network, chain, false)
+                  ) : (
+                    <ConfirmSubText>{fiatAmount}</ConfirmSubText>
+                  )}
                 </>
               )}
             </DetailColumn>

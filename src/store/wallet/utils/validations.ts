@@ -20,6 +20,12 @@ const SanitizeUri = (data: string): string => {
   return newUri;
 };
 
+export const IsBitPayInvoiceWebUrl = (data: string): boolean => {
+  return !!/^https:\/\/(www\.|link\.)?(test\.|staging\.)?bitpay\.com\/(invoice\?)\w+/.exec(
+    data,
+  );
+};
+
 export const IsValidBitPayInvoice = (data: string): boolean => {
   return !!/^https:\/\/(www\.|link\.)?(test\.|staging\.)?bitpay\.com\/i\/\w+/.exec(
     data,
@@ -40,6 +46,11 @@ export const isValidWalletConnectUri = (data: string): boolean => {
 export const isValidMoonpayUri = (data: string): boolean => {
   data = SanitizeUri(data);
   return !!data?.includes('moonpay');
+};
+
+export const isValidRampUri = (data: string): boolean => {
+  data = SanitizeUri(data);
+  return !!data?.includes('ramp');
 };
 
 export const isValidSimplexUri = (data: string): boolean => {

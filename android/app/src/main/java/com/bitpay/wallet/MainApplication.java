@@ -14,6 +14,8 @@ import java.util.ArrayList;
 import java.util.List;
 import com.facebook.react.bridge.JSIModulePackage;
 import com.swmansion.reanimated.ReanimatedJSIModulePackage;
+import com.facebook.react.modules.network.NetworkingModule;
+import okhttp3.OkHttpClient;
 
 // Register custom font
 import com.facebook.react.views.text.ReactFontManager;
@@ -40,6 +42,7 @@ public class MainApplication extends Application implements ReactApplication {
           packages.add(new DoshPackage());
           packages.add(new GooglePushProvisioningPackage());
           packages.add(new SilentPushPackage());
+          packages.add(new TimerPackage());
 
           return packages;
         }
@@ -63,8 +66,17 @@ public class MainApplication extends Application implements ReactApplication {
   @Override
   public void onCreate() {
     super.onCreate();
-    SoLoader.init(this, /* native exopackage */ false);
-    initializeFlipper(this, getReactNativeHost().getReactInstanceManager());
+    Context context = this;
+    SoLoader.init(context, /* native exopackage */ false);
+    initializeFlipper(context, getReactNativeHost().getReactInstanceManager());
+
+    NetworkingModule.setCustomClientBuilder(
+      new NetworkingModule.CustomClientBuilder() {
+        @Override
+        public void apply(OkHttpClient.Builder builder) {
+          builder.addInterceptor(new AllowedUrlPrefixInterceptor(context));
+        }
+    });
 
     // Register custom font
     ReactFontManager.getInstance().addCustomFont(this, "Heebo", R.font.heebo);

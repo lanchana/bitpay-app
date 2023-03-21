@@ -1,7 +1,8 @@
-import {DeferredImport, Key, Token} from './wallet.models';
+import {Key, Token} from './wallet.models';
 import {WalletActionType, WalletActionTypes} from './wallet.types';
 import {FeeLevels} from './effects/fee/fee';
 import {CurrencyOpts} from '../../constants/currencies';
+import {AddLog} from '../log/log.types';
 
 type WalletReduxPersistBlackList = string[];
 export const walletReduxPersistBlackList: WalletReduxPersistBlackList = [
@@ -10,9 +11,13 @@ export const walletReduxPersistBlackList: WalletReduxPersistBlackList = [
   'tokenOptionsByAddress',
 ];
 
+export type Keys = {
+  [key in string]: Key;
+};
+
 export interface WalletState {
   createdOn: number;
-  keys: {[key in string]: Key};
+  keys: Keys;
   tokenOptions: {[key in string]: Token};
   tokenData: {[key in string]: CurrencyOpts};
   tokenOptionsByAddress: {[key in string]: Token};
@@ -31,10 +36,10 @@ export interface WalletState {
   customizeNonce: boolean;
   queuedTransactions: boolean;
   enableReplaceByFee: boolean;
-  deferredImport: null | DeferredImport;
+  initLogs: AddLog[];
 }
 
-const initialState: WalletState = {
+export const initialState: WalletState = {
   createdOn: Date.now(),
   keys: {},
   tokenOptions: {},
@@ -59,7 +64,7 @@ const initialState: WalletState = {
   customizeNonce: false,
   queuedTransactions: false,
   enableReplaceByFee: false,
-  deferredImport: null,
+  initLogs: [], // keep init logs at the end (order is important)
 };
 
 export const walletReducer = (
@@ -79,28 +84,33 @@ export const walletReducer = (
     }
 
     case WalletActionTypes.SET_BACKUP_COMPLETE: {
-      const id = action.payload;
-      const updatedKey = {...state.keys[id], backupComplete: true};
+      const keyId = action.payload;
+      const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
+      const updatedKey = {...keyToUpdate, backupComplete: true};
 
       return {
         ...state,
-        keys: {...state.keys, [id]: updatedKey},
+        keys: {...state.keys, [keyId]: updatedKey},
       };
     }
 
     case WalletActionTypes.SUCCESS_UPDATE_WALLET_STATUS: {
       const {keyId, walletId, status} = action.payload;
       const keyToUpdate = state.keys[keyId];
-      if (keyToUpdate) {
-        keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
-          if (wallet.id === walletId) {
-            wallet.balance = status.balance;
-            wallet.pendingTxps = status.pendingTxps;
-            wallet.isRefreshing = false;
-          }
-          return wallet;
-        });
+      if (!keyToUpdate) {
+        return state;
       }
+      keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
+        if (wallet.id === walletId) {
+          wallet.balance = status.balance;
+          wallet.pendingTxps = status.pendingTxps;
+          wallet.isRefreshing = false;
+        }
+        return wallet;
+      });
       return {
         ...state,
         keys: {
@@ -119,14 +129,15 @@ export const walletReducer = (
     case WalletActionTypes.FAILED_UPDATE_WALLET_STATUS: {
       const {keyId, walletId} = action.payload;
       const keyToUpdate = state.keys[keyId];
-      if (keyToUpdate) {
-        keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
-          if (wallet.id === walletId) {
-            wallet.isRefreshing = false;
-          }
-          return wallet;
-        });
+      if (!keyToUpdate) {
+        return state;
       }
+      keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
+        if (wallet.id === walletId) {
+          wallet.isRefreshing = false;
+        }
+        return wallet;
+      });
       return {
         ...state,
         keys: {
@@ -146,12 +157,13 @@ export const walletReducer = (
       action.payload.forEach(updates => {
         const {keyId, totalBalance, totalBalanceLastDay} = updates;
         const keyToUpdate = state.keys[keyId];
+        if (keyToUpdate) {
+          keyToUpdate.totalBalance = totalBalance;
+          keyToUpdate.totalBalanceLastDay = totalBalanceLastDay;
 
-        keyToUpdate.totalBalance = totalBalance;
-        keyToUpdate.totalBalanceLastDay = totalBalanceLastDay;
-
-        updatedKeys[keyId] = {...keyToUpdate};
-        updatedBalanceCacheKeys[keyId] = dateNow;
+          updatedKeys[keyId] = {...keyToUpdate};
+          updatedBalanceCacheKeys[keyId] = dateNow;
+        }
       });
 
       return {
@@ -197,8 +209,10 @@ export const walletReducer = (
     case WalletActionTypes.SUCCESS_ENCRYPT_OR_DECRYPT_PASSWORD: {
       const {key} = action.payload;
       const keyToUpdate = state.keys[key.id];
+      if (!keyToUpdate) {
+        return state;
+      }
       keyToUpdate.isPrivKeyEncrypted = !!key.methods!.isPrivKeyEncrypted();
-
       return {
         ...state,
         keys: {
@@ -213,6 +227,10 @@ export const walletReducer = (
 
     case WalletActionTypes.DELETE_KEY: {
       const {keyId} = action.payload;
+      const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
       const balanceToRemove = state.keys[keyId].totalBalance;
       delete state.keys[keyId];
 
@@ -275,13 +293,15 @@ export const walletReducer = (
     case WalletActionTypes.SUCCESS_GET_RECEIVE_ADDRESS: {
       const {keyId, walletId, receiveAddress} = action.payload;
       const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
       keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
         if (wallet.id === walletId) {
           wallet.receiveAddress = receiveAddress;
         }
         return wallet;
       });
-
       return {
         ...state,
         keys: {
@@ -296,6 +316,9 @@ export const walletReducer = (
     case WalletActionTypes.UPDATE_KEY_NAME: {
       const {keyId, name} = action.payload;
       const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
       keyToUpdate.keyName = name;
 
       return {
@@ -312,6 +335,9 @@ export const walletReducer = (
     case WalletActionTypes.UPDATE_WALLET_NAME: {
       const {keyId, walletId, name} = action.payload;
       const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
       keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
         if (wallet.id === walletId) {
           wallet.walletName = name;
@@ -333,6 +359,9 @@ export const walletReducer = (
     case WalletActionTypes.SET_WALLET_REFRESHING: {
       const {keyId, walletId, isRefreshing} = action.payload;
       const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
       keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
         if (wallet.id === walletId) {
           wallet.isRefreshing = isRefreshing;
@@ -354,6 +383,9 @@ export const walletReducer = (
     case WalletActionTypes.UPDATE_WALLET_TX_HISTORY: {
       const {keyId, walletId, transactionHistory} = action.payload;
       const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
       keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
         if (wallet.id === walletId) {
           wallet.transactionHistory = transactionHistory;
@@ -403,6 +435,9 @@ export const walletReducer = (
     case WalletActionTypes.SYNC_WALLETS: {
       const {keyId, wallets} = action.payload;
       const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
       keyToUpdate.wallets = keyToUpdate.wallets.concat(wallets);
 
       return {
@@ -421,6 +456,9 @@ export const walletReducer = (
         wallet: {keyId, id},
       } = action.payload;
       const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
       keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
         if (wallet.id === id) {
           wallet.hideWallet = !wallet.hideWallet;
@@ -444,6 +482,9 @@ export const walletReducer = (
         wallet: {keyId, id},
       } = action.payload;
       const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
       keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
         if (wallet.id === id) {
           wallet.hideBalance = !wallet.hideBalance;
@@ -465,6 +506,9 @@ export const walletReducer = (
     case WalletActionTypes.TOGGLE_HIDE_KEY_BALANCE: {
       const {keyId} = action.payload;
       const keyToUpdate = state.keys[keyId];
+      if (!keyToUpdate) {
+        return state;
+      }
       keyToUpdate.hideKeyBalance = !keyToUpdate.hideKeyBalance;
       return {
         ...state,
@@ -484,20 +528,6 @@ export const walletReducer = (
           ...state.feeLevel,
           [action.payload.currency]: action.payload.feeLevel,
         },
-      };
-    }
-
-    case WalletActionTypes.UPDATE_DEFERRED_IMPORT: {
-      return {
-        ...state,
-        deferredImport: action.payload,
-      };
-    }
-
-    case WalletActionTypes.CLEAR_DEFERRED_IMPORT: {
-      return {
-        ...state,
-        deferredImport: null,
       };
     }
 

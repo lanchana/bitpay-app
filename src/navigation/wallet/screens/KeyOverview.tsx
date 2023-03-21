@@ -5,7 +5,13 @@ import React, {
   useMemo,
   useState,
 } from 'react';
-import {CommonActions, useTheme} from '@react-navigation/native';
+import {
+  CommonActions,
+  RouteProp,
+  useNavigation,
+  useRoute,
+  useTheme,
+} from '@react-navigation/native';
 import {FlatList, LogBox, RefreshControl, TouchableOpacity} from 'react-native';
 import styled from 'styled-components/native';
 import haptic from '../../../components/haptic-feedback/haptic';
@@ -49,7 +55,6 @@ import {BalanceUpdateError} from '../components/ErrorMessages';
 import OptionsSheet, {Option} from '../components/OptionsSheet';
 import Icons from '../components/WalletIcons';
 import {WalletStackParamList} from '../WalletStack';
-import {StackScreenProps} from '@react-navigation/stack';
 import ChevronDownSvg from '../../../../assets/img/chevron-down.svg';
 import {
   AppDispatch,
@@ -64,19 +69,14 @@ import EncryptPasswordImg from '../../../../assets/img/tinyicon-encrypt.svg';
 import EncryptPasswordDarkModeImg from '../../../../assets/img/tinyicon-encrypt-darkmode.svg';
 import {useTranslation} from 'react-i18next';
 import {toFiat} from '../../../store/wallet/utils/wallet';
-import _ from 'lodash';
-import {logSegmentEvent} from '../../../store/app/app.effects';
+import {each} from 'lodash';
 import {COINBASE_ENV} from '../../../api/coinbase/coinbase.constants';
 import CoinbaseDropdownOption from '../components/CoinbaseDropdownOption';
+import {Analytics} from '../../../store/analytics/analytics.effects';
 
 LogBox.ignoreLogs([
   'Non-serializable values were found in the navigation state',
 ]);
-
-type KeyOverviewScreenProps = StackScreenProps<
-  WalletStackParamList,
-  'KeyOverview'
->;
 
 const Row = styled.View`
   flex-direction: row;
@@ -342,14 +342,17 @@ export const buildNestedWalletList = (
   return walletList;
 };
 
-const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
+const KeyOverview = () => {
   const {t} = useTranslation();
+  const {
+    params: {id, context},
+  } = useRoute<RouteProp<WalletStackParamList, 'KeyOverview'>>();
+  const navigation = useNavigation();
   const dispatch = useAppDispatch();
   const logger = useLogger();
   const theme = useTheme();
   const [showKeyOptions, setShowKeyOptions] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const {id, context} = route.params;
   const {keys} = useAppSelector(({WALLET}) => WALLET);
   const {rates} = useAppSelector(({RATE}) => RATE);
   const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
@@ -361,7 +364,7 @@ const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
   const hasMultipleKeys =
     Object.values(keys).filter(k => k.backupComplete).length > 1;
   let pendingTxps: any = [];
-  _.each(key?.wallets, x => {
+  each(key?.wallets, x => {
     if (x.pendingTxps) {
       pendingTxps = pendingTxps.concat(x.pendingTxps);
     }
@@ -410,8 +413,11 @@ const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
               {key?.methods?.isPrivKeyEncrypted() ? (
                 <CogIconContainer
                   onPress={() =>
-                    navigation.navigate('KeySettings', {
-                      key,
+                    navigation.navigate('Wallet', {
+                      screen: 'KeySettings',
+                      params: {
+                        key,
+                      },
                     })
                   }
                   activeOpacity={ActiveOpacity}>
@@ -443,9 +449,12 @@ const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
               err instanceof Error ? err.message : JSON.stringify(err);
             logger.error(`error [getStatus]: ${errStr}`);
           } else {
-            navigation.navigate('Copayers', {
-              wallet: key?.wallets[0],
-              status: status?.wallet,
+            navigation.navigate('Wallet', {
+              screen: 'Copayers',
+              params: {
+                wallet: key?.wallets[0],
+                status: status?.wallet,
+              },
             });
           }
         },
@@ -454,7 +463,7 @@ const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
   }, [navigation, key?.wallets, context]);
 
   useEffect(() => {
-    dispatch(logSegmentEvent('track', 'View Key'));
+    dispatch(Analytics.track('View Key'));
   }, []);
 
   const {wallets = [], totalBalance} =
@@ -489,9 +498,12 @@ const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
         ),
         onPress: () => {
           haptic('impactLight');
-          navigation.navigate('KeySettings', {
-            key,
-            context: 'createEncryptPassword',
+
+          navigation.navigate('Wallet', {
+            screen: 'CreateEncryptPassword',
+            params: {
+              key,
+            },
           });
         },
       });
@@ -503,8 +515,11 @@ const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
       description: t('View all the ways to manage and configure your key.'),
       onPress: () => {
         haptic('impactLight');
-        navigation.navigate('KeySettings', {
-          key,
+        navigation.navigate('Wallet', {
+          screen: 'KeySettings',
+          params: {
+            key,
+          },
         });
       },
     });
@@ -512,7 +527,10 @@ const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
 
   const onPressTxpBadge = useMemo(
     () => () => {
-      navigation.navigate('TransactionProposalNotifications', {keyId: key.id});
+      navigation.navigate('Wallet', {
+        screen: 'TransactionProposalNotifications',
+        params: {keyId: key.id},
+      });
     },
     [],
   );
@@ -553,24 +571,33 @@ const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
                   } else {
                     if (status?.wallet?.status === 'complete') {
                       fullWalletObj.openWallet({}, () => {
-                        navigation.navigate('WalletDetails', {
-                          walletId: item.id,
-                          key,
+                        navigation.navigate('Wallet', {
+                          screen: 'WalletDetails',
+                          params: {
+                            walletId: item.id,
+                            key,
+                          },
                         });
                       });
                       return;
                     }
-                    navigation.navigate('Copayers', {
-                      wallet: fullWalletObj,
-                      status: status?.wallet,
+                    navigation.navigate('Wallet', {
+                      screen: 'Copayers',
+                      params: {
+                        wallet: fullWalletObj,
+                        status: status?.wallet,
+                      },
                     });
                   }
                 },
               );
             } else {
-              navigation.navigate('WalletDetails', {
-                walletId: item.id,
-                key,
+              navigation.navigate('Wallet', {
+                screen: 'WalletDetails',
+                params: {
+                  key,
+                  walletId: item.id,
+                },
               });
             }
           }}
@@ -624,8 +651,11 @@ const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
               activeOpacity={ActiveOpacity}
               onPress={() => {
                 haptic('impactLight');
-                navigation.navigate('AddingOptions', {
-                  key,
+                navigation.navigate('Wallet', {
+                  screen: 'AddingOptions',
+                  params: {
+                    key,
+                  },
                 });
               }}>
               <Icons.Add />
@@ -666,7 +696,7 @@ const KeyOverview: React.FC<KeyOverviewScreenProps> = ({navigation, route}) => {
                     setShowKeyDropdown(false);
                     navigation.setParams({
                       id: keyId,
-                    });
+                    } as any);
                   }}
                   defaultAltCurrencyIsoCode={defaultAltCurrency.isoCode}
                   hideKeyBalance={_key.hideKeyBalance}

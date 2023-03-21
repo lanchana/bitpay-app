@@ -6,7 +6,8 @@ import {
 } from '@react-navigation/native';
 import {createStackNavigator} from '@react-navigation/stack';
 import debounce from 'lodash.debounce';
-import React, {useEffect, useMemo, useState} from 'react';
+import Braze from 'react-native-appboy-sdk';
+import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {
   Appearance,
   AppState,
@@ -101,15 +102,23 @@ import CardActivationStack, {
   CardActivationStackParamList,
 } from './navigation/card-activation/CardActivationStack';
 import {sleep} from './utils/helper-methods';
-import {
-  Analytics,
-  handleBwsEvent,
-  shortcutListener,
-} from './store/app/app.effects';
+import {Analytics} from './store/analytics/analytics.effects';
+import {handleBwsEvent, shortcutListener} from './store/app/app.effects';
 import NotificationsSettingsStack, {
   NotificationsSettingsStackParamsList,
 } from './navigation/tabs/settings/notifications/NotificationsStack';
 import QuickActions, {ShortcutItem} from 'react-native-quick-actions';
+import ZenLedgerStack, {
+  ZenLedgerStackParamsList,
+} from './navigation/zenledger/ZenLedgerStack';
+import {WalletBackupActions} from './store/wallet-backup';
+import {successCreateKey} from './store/wallet/wallet.actions';
+import {bootstrapKey, bootstrapWallets} from './store/transforms/transforms';
+import {Key, Wallet} from './store/wallet/wallet.models';
+import {Keys} from './store/wallet/wallet.reducer';
+import NetworkFeePolicySettingsStack, {
+  NetworkFeePolicySettingsStackParamsList,
+} from './navigation/tabs/settings/NetworkFeePolicy/NetworkFeePolicyStack';
 
 // ROOT NAVIGATION CONFIG
 export type RootStackParamList = {
@@ -135,6 +144,8 @@ export type RootStackParamList = {
   WalletConnect: NavigatorScreenParams<WalletConnectStackParamList>;
   Debug: DebugScreenParamList;
   NotificationsSettings: NavigatorScreenParams<NotificationsSettingsStackParamsList>;
+  ZenLedger: NavigatorScreenParams<ZenLedgerStackParamsList>;
+  NetworkFeePolicySettings: NavigatorScreenParams<NetworkFeePolicySettingsStackParamsList>;
 };
 // ROOT NAVIGATION CONFIG
 export enum RootStacks {
@@ -158,9 +169,11 @@ export enum RootStacks {
   COINBASE = 'Coinbase',
   BUY_CRYPTO = 'BuyCrypto',
   SWAP_CRYPTO = 'SwapCrypto',
-  WALLET_CONNECT = 'WalletConnect',
+  WALLET_CONNECT_V2 = 'WalletConnect',
   DEBUG = 'Debug',
   NOTIFICATIONS_SETTINGS = 'NotificationsSettings',
+  ZENLEDGER = 'ZenLedger',
+  NETWORK_FEE_POLICY_SETTINGS = 'NetworkFeePolicySettings',
 }
 
 // ROOT NAVIGATION CONFIG
@@ -181,7 +194,8 @@ export type NavScreenParams = NavigatorScreenParams<
     SwapCryptoStackParamList &
     ScanStackParamList &
     WalletConnectStackParamList &
-    NotificationsSettingsStackParamsList
+    NotificationsSettingsStackParamsList &
+    ZenLedgerStackParamsList
 >;
 
 declare global {
@@ -239,6 +253,76 @@ export default () => {
   );
   const lockAuthorizedUntil = useAppSelector(
     ({APP}) => APP.lockAuthorizedUntil,
+  );
+
+  const keys = useAppSelector(({WALLET}) => WALLET.keys);
+  const backupKeys = useAppSelector(({WALLET_BACKUP}) => WALLET_BACKUP.keys);
+  const expectedKeyLengthChange = useAppSelector(
+    ({APP}) => APP.expectedKeyLengthChange,
+  );
+  const [previousKeysLength, setPreviousKeysLength] = useState(
+    Object.keys(backupKeys).length,
+  );
+
+  const bootstrapKeyAndWallets = ({
+    keyId,
+    keys,
+  }: {
+    keyId: string;
+    keys: Keys;
+  }) => {
+    keys[keyId] = bootstrapKey(keys[keyId], keyId, log => dispatch(log)) as Key;
+    if (!keys[keyId]) {
+      throw new Error('bootstrapKey function failed');
+    }
+    keys[keyId].wallets = bootstrapWallets(keys[keyId].wallets, log =>
+      dispatch(log),
+    ) as Wallet[];
+  };
+
+  const recoverKeys = ({backupKeys, keys}: {backupKeys: Keys; keys: Keys}) => {
+    if (Object.keys(backupKeys).length === 0) {
+      LogActions.persistLog(
+        LogActions.warn('No backup available for recovering keys.'),
+      );
+      return;
+    }
+    // find missing keys in the backup
+    const missingKeys: string[] = Object.keys(backupKeys).filter(
+      backupKeyId => !keys[backupKeyId],
+    );
+
+    // use backup keys to recover the missing keys
+    missingKeys.forEach((missingKey: string) => {
+      try {
+        bootstrapKeyAndWallets({keyId: missingKey, keys: backupKeys});
+        dispatch(
+          successCreateKey({
+            key: backupKeys[missingKey],
+          }),
+        );
+      } catch (err) {
+        const errStr = err instanceof Error ? err.message : JSON.stringify(err);
+        dispatch(
+          LogActions.persistLog(
+            LogActions.warn(`Something went wrong. Backup failed. ${errStr}`),
+          ),
+        );
+      }
+    });
+  };
+
+  const debounceBoostrapAndSave = useMemo(
+    () =>
+      debounce((keys: Keys) => {
+        const newKeyBackup = {...keys};
+        const keyIds = Object.keys(newKeyBackup);
+        keyIds.forEach(keyId =>
+          bootstrapKeyAndWallets({keyId, keys: newKeyBackup}),
+        );
+        dispatch(WalletBackupActions.successBackupUpWalletKeys(newKeyBackup));
+      }, 1500),
+    [],
   );
 
   const debouncedOnStateChange = useMemo(
@@ -307,9 +391,45 @@ export default () => {
     }
   }, [appLanguage]);
 
+  // BACKUP KEY LOGIC
+  useEffect(() => {
+    const numNewKeys = Object.keys(keys).length;
+    const keyLengthChange = previousKeysLength - numNewKeys;
+    setPreviousKeysLength(numNewKeys);
+    dispatch(AppActions.setExpectedKeyLengthChange(0));
+
+    // keys length changed as expected
+    if (expectedKeyLengthChange === keyLengthChange) {
+      try {
+        debounceBoostrapAndSave(keys);
+        return;
+      } catch (err) {
+        const errStr = err instanceof Error ? err.message : JSON.stringify(err);
+        dispatch(
+          LogActions.persistLog(
+            LogActions.warn(
+              `Something went wrong backing up most recent version of keys. ${errStr}`,
+            ),
+          ),
+        );
+        recoverKeys({backupKeys, keys});
+        return;
+      }
+    }
+    if (keyLengthChange >= 1) {
+      dispatch(
+        LogActions.persistLog(
+          LogActions.warn('one or more keys were deleted unexpectedly'),
+        ),
+      );
+
+      recoverKeys({backupKeys, keys});
+    }
+  }, [dispatch, keys, previousKeysLength, expectedKeyLengthChange]);
+
   // CHECK PIN || BIOMETRIC
   useEffect(() => {
-    function onAppStateChange(status: AppStateStatus) {
+    async function onAppStateChange(status: AppStateStatus) {
       // status === 'active' when the app goes from background to foreground,
 
       const showLockOption = () => {
@@ -330,14 +450,16 @@ export default () => {
           dispatch(AppActions.showBlur(false));
         } else if (status === 'active' && !appIsLoading) {
           if (lockAuthorizedUntil) {
-            const now = Math.floor(Date.now() / 1000);
-            const totalSecs = lockAuthorizedUntil - now;
+            const timeSinceBoot = await NativeModules.Timer.getRelativeTime();
+            const totalSecs =
+              Number(lockAuthorizedUntil) - Number(timeSinceBoot);
             if (totalSecs < 0) {
               dispatch(AppActions.lockAuthorizedUntil(undefined));
               showLockOption();
             } else {
+              const timeSinceBoot = await NativeModules.Timer.getRelativeTime();
               const authorizedUntil =
-                Math.floor(Date.now() / 1000) + LOCK_AUTHORIZED_TIME;
+                Number(timeSinceBoot) + LOCK_AUTHORIZED_TIME;
               dispatch(AppActions.lockAuthorizedUntil(authorizedUntil));
               dispatch(AppActions.showBlur(false));
             }
@@ -442,9 +564,16 @@ export default () => {
                 ),
               );
             } else {
-              const url = await Linking.getInitialURL();
+              const getBrazeInitialUrl = async (): Promise<string> =>
+                new Promise(resolve =>
+                  Braze.getInitialURL(deepLink => resolve(deepLink)),
+                );
+              const [url, brazeUrl] = await Promise.all([
+                Linking.getInitialURL(),
+                getBrazeInitialUrl(),
+              ]);
               await sleep(10);
-              urlEventHandler({url});
+              urlEventHandler({url: url || brazeUrl});
             }
 
             LogActions.info('QuickActions Initialized');
@@ -534,6 +663,10 @@ export default () => {
               name={RootStacks.NOTIFICATIONS_SETTINGS}
               component={NotificationsSettingsStack}
             />
+            <Root.Screen
+              name={RootStacks.NETWORK_FEE_POLICY_SETTINGS}
+              component={NetworkFeePolicySettingsStack}
+            />
             <Root.Screen name={RootStacks.ABOUT} component={AboutStack} />
             <Root.Screen name={RootStacks.COINBASE} component={CoinbaseStack} />
             <Root.Screen
@@ -548,8 +681,12 @@ export default () => {
               }}
             />
             <Root.Screen
-              name={RootStacks.WALLET_CONNECT}
+              name={RootStacks.WALLET_CONNECT_V2}
               component={WalletConnectStack}
+            />
+            <Root.Screen
+              name={RootStacks.ZENLEDGER}
+              component={ZenLedgerStack}
             />
           </Root.Navigator>
           <OnGoingProcessModal />

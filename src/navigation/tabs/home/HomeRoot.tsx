@@ -5,30 +5,23 @@ import {
 } from '@react-navigation/native';
 import {each} from 'lodash';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
+import {useTranslation} from 'react-i18next';
 import {RefreshControl, ScrollView} from 'react-native';
+import {batch} from 'react-redux';
 import {STATIC_CONTENT_CARDS_ENABLED} from '../../../constants/config';
 import {SupportedCoinsOptions} from '../../../constants/SupportedCurrencyOptions';
 import {
-  clearOnCompleteOnboardingList,
-  setKeyMigrationFailureModalHasBeenShown,
   setShowKeyMigrationFailureModal,
   showBottomNotificationModal,
 } from '../../../store/app/app.actions';
-import {
-  logSegmentEvent,
-  requestBrazeContentRefresh,
-} from '../../../store/app/app.effects';
+import {requestBrazeContentRefresh} from '../../../store/app/app.effects';
 import {
   selectBrazeDoMore,
   selectBrazeQuickLinks,
   selectBrazeShopWithCrypto,
 } from '../../../store/app/app.selectors';
 import {selectCardGroups} from '../../../store/card/card.selectors';
-import {
-  deferredImportErrorNotification,
-  getPriceHistory,
-  startGetRates,
-} from '../../../store/wallet/effects';
+import {getPriceHistory, startGetRates} from '../../../store/wallet/effects';
 import {startUpdateAllKeyAndWalletStatus} from '../../../store/wallet/effects/status/status';
 import {updatePortfolioBalance} from '../../../store/wallet/wallet.actions';
 import {SlateDark, White} from '../../../styles/colors';
@@ -56,15 +49,14 @@ import DefaultQuickLinks from './components/quick-links/DefaultQuickLinks';
 import QuickLinksCarousel from './components/quick-links/QuickLinksCarousel';
 import {HeaderContainer, HomeContainer} from './components/Styled';
 import KeyMigrationFailureModal from './components/KeyMigrationFailureModal';
-import {batch} from 'react-redux';
 import {useThemeType} from '../../../utils/hooks/useThemeType';
-import {useTranslation} from 'react-i18next';
 import {ProposalBadgeContainer} from '../../../components/styled/Containers';
 import {ProposalBadge} from '../../../components/styled/Text';
 import {
   receiveCrypto,
   sendCrypto,
 } from '../../../store/wallet/effects/send/send';
+import {Analytics} from '../../../store/analytics/analytics.effects';
 
 const HomeRoot = () => {
   const {t} = useTranslation();
@@ -89,9 +81,6 @@ const HomeRoot = () => {
   );
   const keyMigrationFailureModalHasBeenShown = useAppSelector(
     ({APP}) => APP.keyMigrationFailureModalHasBeenShown,
-  );
-  const onCompleteOnboardingList = useAppSelector(
-    ({APP}) => APP.onCompleteOnboardingList,
   );
   const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
   const hasKeys = Object.values(keys).length;
@@ -200,20 +189,9 @@ const HomeRoot = () => {
     if (keyMigrationFailure && !keyMigrationFailureModalHasBeenShown) {
       batch(() => {
         dispatch(setShowKeyMigrationFailureModal(true));
-        dispatch(setKeyMigrationFailureModalHasBeenShown());
       });
     }
   }, [dispatch, keyMigrationFailure, keyMigrationFailureModalHasBeenShown]);
-
-  useEffect(() => {
-    if (
-      onCompleteOnboardingList?.length &&
-      onCompleteOnboardingList.includes('deferredImportErrorNotification')
-    ) {
-      dispatch(deferredImportErrorNotification());
-      dispatch(clearOnCompleteOnboardingList());
-    }
-  }, [dispatch, onCompleteOnboardingList]);
 
   const scrollViewRef = useRef<ScrollView>(null);
   useScrollToTop(scrollViewRef);
@@ -274,7 +252,7 @@ const HomeRoot = () => {
               onActionPress={() => {
                 navigation.navigate('Tabs', {screen: 'Shop'});
                 dispatch(
-                  logSegmentEvent('track', 'Clicked Shop with Crypto', {
+                  Analytics.track('Clicked Shop with Crypto', {
                     context: 'HomeRoot',
                   }),
                 );

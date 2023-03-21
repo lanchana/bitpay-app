@@ -27,12 +27,13 @@ import {
 } from '../../../app/app.effects';
 import {
   dismissDecryptPasswordModal,
+  setExpectedKeyLengthChange,
   showDecryptPasswordModal,
 } from '../../../app/app.actions';
 import {addTokenChainSuffix, sleep} from '../../../../utils/helper-methods';
 import {t} from 'i18next';
 import {LogActions} from '../../../log';
-
+import {batch} from 'react-redux';
 export interface CreateOptions {
   network?: Network;
   account?: number;
@@ -51,6 +52,7 @@ export interface AddWalletData {
   };
   associatedWallet?: Wallet;
   options: CreateOptions;
+  context?: string;
 }
 
 const BWC = BwcProvider.getInstance();
@@ -68,6 +70,7 @@ export const startCreateKey =
       try {
         const state = getState();
         const network = state.APP.network;
+        const keys = state.WALLET.keys;
 
         const _key = BWC.createKey({
           seedType: 'new',
@@ -84,12 +87,17 @@ export const startCreateKey =
         );
 
         const key = buildKeyObj({key: _key, wallets});
-
-        dispatch(
-          successCreateKey({
-            key,
-          }),
-        );
+        const previousKeysLength = Object.keys(keys).length;
+        const numNewKeys = Object.keys(keys).length + 1;
+        const expectedLengthChange = previousKeysLength - numNewKeys;
+        batch(() => {
+          dispatch(
+            successCreateKey({
+              key,
+            }),
+          );
+          dispatch(setExpectedKeyLengthChange(expectedLengthChange));
+        });
         resolve(key);
       } catch (err) {
         const errstring =
@@ -108,6 +116,7 @@ export const addWallet =
     currency,
     associatedWallet,
     options,
+    context,
   }: AddWalletData): Effect<Promise<Wallet>> =>
   async (dispatch, getState): Promise<Wallet> => {
     return new Promise(async (resolve, reject) => {
@@ -170,6 +179,7 @@ export const addWallet =
             key: key.methods!,
             coin: currency.currencyAbbreviation as SupportedCoins,
             options,
+            context,
           })) as Wallet;
         }
 
@@ -225,7 +235,7 @@ export const addWallet =
           err instanceof Error ? err.message : JSON.stringify(err);
         dispatch(failedAddWallet());
         dispatch(LogActions.error(`Error adding wallet: ${errstring}`));
-        reject();
+        context === 'WalletConnect' ? reject(err) : reject();
       }
     });
   };
@@ -334,10 +344,11 @@ const createWallet = (params: {
   key: KeyMethods;
   coin: SupportedCoins;
   options: CreateOptions;
+  context?: string;
 }): Promise<API> => {
   return new Promise((resolve, reject) => {
     const bwcClient = BWC.getClient();
-    const {key, coin, options} = params;
+    const {key, coin, options, context} = params;
 
     // set defaults
     const {account, network, password, singleAddress, useNativeSegwit} = {
@@ -372,6 +383,9 @@ const createWallet = (params: {
         if (err) {
           switch (err.name) {
             case 'bwc.ErrorCOPAYER_REGISTERED': {
+              if (context === 'WalletConnect') {
+                return reject(err);
+              }
               // eslint-disable-next-line no-shadow
               const account = options.account || 0;
               if (account >= 20) {
@@ -428,11 +442,23 @@ const createTokenWallet =
 
         wallet.preferences = wallet.preferences || {
           tokenAddresses: [],
+          maticTokenAddresses: [],
         };
-        wallet.preferences.tokenAddresses?.push(
-          // @ts-ignore
-          tokenCredentials.token.address,
-        );
+
+        switch (wallet.credentials.chain) {
+          case 'eth':
+            wallet.preferences.tokenAddresses?.push(
+              // @ts-ignore
+              tokenCredentials.token.address,
+            );
+            break;
+          case 'matic':
+            wallet.preferences.maticTokenAddresses?.push(
+              // @ts-ignore
+              tokenCredentials.token.address,
+            );
+            break;
+        }
 
         wallet.savePreferences(wallet.preferences, (err: any) => {
           if (err) {
@@ -464,6 +490,7 @@ export const startCreateKeyWithOpts =
             brazeEid,
             defaultLanguage,
           },
+          WALLET: {keys},
         } = getState();
         const _key = BWC.createKey({
           seedType: opts.seedType!,
@@ -515,13 +542,17 @@ export const startCreateKeyWithOpts =
           wallets: [wallet],
           backupComplete: true,
         });
-
-        dispatch(
-          successCreateKey({
-            key,
-          }),
-        );
-
+        const previousKeysLength = Object.keys(keys).length;
+        const numNewKeys = Object.keys(keys).length + 1;
+        const expectedLengthChange = previousKeysLength - numNewKeys;
+        batch(() => {
+          dispatch(
+            successCreateKey({
+              key,
+            }),
+          );
+          dispatch(setExpectedKeyLengthChange(expectedLengthChange));
+        });
         resolve(key);
       } catch (err) {
         const errstring =

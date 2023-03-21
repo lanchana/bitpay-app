@@ -43,6 +43,7 @@ import {
 import {
   FormatAmountStr,
   GetExcludedUtxosMessage,
+  parseAmountToStringIfBN,
   SatToUnit,
 } from '../../../../store/wallet/effects/amount/amount';
 import {
@@ -75,10 +76,7 @@ import {
   ArrowContainer,
 } from '../styled/SwapCryptoCheckout.styled';
 import {startGetRates} from '../../../../store/wallet/effects';
-import {
-  logSegmentEvent,
-  startOnGoingProcessModal,
-} from '../../../../store/app/app.effects';
+import {startOnGoingProcessModal} from '../../../../store/app/app.effects';
 import {
   dismissOnGoingProcessModal,
   showBottomNotificationModal,
@@ -93,6 +91,7 @@ import {SwapCryptoActions} from '../../../../store/swap-crypto';
 import SelectorArrowRight from '../../../../../assets/img/selector-arrow-right.svg';
 import {useTranslation} from 'react-i18next';
 import {RootState} from '../../../../store';
+import {Analytics} from '../../../../store/analytics/analytics.effects';
 
 // Styled
 export const SwapCheckoutContainer = styled.SafeAreaView`
@@ -211,9 +210,19 @@ const ChangellyCheckout: React.FC = () => {
             'Changelly createFixTransaction Error: ' + data.error.message,
           );
 
-          if (
-            Math.abs(data.error.code) == 32602 ||
-            Math.abs(data.error.code) == 32603
+          if (data.error.message.includes("Can't exchange this currencies")) {
+            const msg = t(
+              "Can't exchange this currencies, please try again later.",
+            );
+            const reason = `Can't exchange this currencies error. Trying to exchange from ${fromWalletSelected.currencyAbbreviation.toLowerCase()}_${
+              fromWalletSelected.chain
+            } to ${toWalletSelected.currencyAbbreviation.toLowerCase()}_${
+              toWalletSelected.chain
+            }`;
+            showError(msg, reason);
+          } else if (
+            Math.abs(data.error.code) === 32602 ||
+            Math.abs(data.error.code) === 32603
           ) {
             logger.debug(
               'Changelly rateId was expired or already used. Generating a new one',
@@ -378,7 +387,7 @@ const ChangellyCheckout: React.FC = () => {
         clearInterval(countDown);
       }
       dispatch(
-        logSegmentEvent('track', 'Failed Crypto Swap', {
+        Analytics.track('Failed Crypto Swap', {
           exchange: 'changelly',
           context: 'ChangellyCheckout',
           reasonForFailure: 'Time to make the payment expired',
@@ -478,6 +487,9 @@ const ChangellyCheckout: React.FC = () => {
           txp.tokenAddress = token.address;
           if (txp.outputs) {
             for (const output of txp.outputs) {
+              if (output.amount) {
+                output.amount = parseAmountToStringIfBN(output.amount);
+              }
               if (!output.data) {
                 output.data = BWC.getCore()
                   .Transactions.get({chain: getCWCChain(wallet.chain)})
@@ -580,7 +592,7 @@ const ChangellyCheckout: React.FC = () => {
     logger.debug('Saved swap with: ' + JSON.stringify(newData));
 
     dispatch(
-      logSegmentEvent('track', 'Successful Crypto Swap', {
+      Analytics.track('Successful Crypto Swap', {
         fromCoin: fromWalletSelected.currencyAbbreviation,
         toCoin: toWalletSelected.currencyAbbreviation,
         amountFrom: amountFrom,
@@ -628,7 +640,7 @@ const ChangellyCheckout: React.FC = () => {
     dispatch(dismissOnGoingProcessModal());
     await sleep(1000);
     dispatch(
-      logSegmentEvent('track', 'Failed Crypto Swap', {
+      Analytics.track('Failed Crypto Swap', {
         exchange: 'changelly',
         context: 'ChangellyCheckout',
         reasonForFailure: reason || 'unknown',

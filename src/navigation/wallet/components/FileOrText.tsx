@@ -26,10 +26,7 @@ import {
 } from '../../../store/app/app.actions';
 import {RouteProp} from '@react-navigation/core';
 import {WalletStackParamList} from '../WalletStack';
-import {
-  logSegmentEvent,
-  startOnGoingProcessModal,
-} from '../../../store/app/app.effects';
+import {startOnGoingProcessModal} from '../../../store/app/app.effects';
 import {backupRedirect} from '../screens/Backup';
 import {RootState} from '../../../store';
 import {sleep} from '../../../utils/helper-methods';
@@ -38,6 +35,7 @@ import {updatePortfolioBalance} from '../../../store/wallet/wallet.actions';
 import {useTranslation} from 'react-i18next';
 import {KeyboardAwareScrollView} from 'react-native-keyboard-aware-scroll-view';
 import {ScrollView} from 'react-native';
+import {Analytics} from '../../../store/analytics/analytics.effects';
 
 const BWCProvider = BwcProvider.getInstance();
 
@@ -108,7 +106,7 @@ const FileOrText = () => {
         key,
       });
       dispatch(
-        logSegmentEvent('track', 'Imported Key', {
+        Analytics.track('Imported Key', {
           context: route.params?.context || '',
           source: 'FileOrText',
         }),
@@ -161,6 +159,7 @@ const FileOrText = () => {
 
   return (
     <ScrollViewContainer
+      accessibilityLabel="file-or-text-view"
       extraScrollHeight={90}
       keyboardShouldPersistTaps={'handled'}>
       <ContentView keyboardShouldPersistTaps={'handled'}>
@@ -172,6 +171,7 @@ const FileOrText = () => {
             control={control}
             render={({field: {onChange, onBlur, value}}) => (
               <ImportTextInput
+                accessibilityLabel="import-text-input"
                 multiline
                 numberOfLines={5}
                 onChangeText={onChange}
@@ -191,6 +191,7 @@ const FileOrText = () => {
             control={control}
             render={({field: {onChange, onBlur, value}}) => (
               <BoxInput
+                accessibilityLabel="password-box-input"
                 label={t('PASSWORD')}
                 placeholder={'strongPassword123'}
                 type={'password'}
@@ -205,7 +206,10 @@ const FileOrText = () => {
           />
         </FormRow>
 
-        <Button buttonStyle={'primary'} onPress={onSubmit}>
+        <Button
+          accessibilityLabel="import-wallet-button"
+          buttonStyle={'primary'}
+          onPress={onSubmit}>
           {t('Import Wallet')}
         </Button>
       </ContentView>

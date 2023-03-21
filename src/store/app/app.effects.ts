@@ -1,4 +1,4 @@
-import {JsonMap, UserTraits} from '@segment/analytics-react-native';
+import {JsonMap} from '@segment/analytics-react-native';
 import BitAuth from 'bitauth';
 import i18n, {t} from 'i18next';
 import {debounce} from 'lodash';
@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import Braze from 'react-native-appboy-sdk';
 import RNBootSplash from 'react-native-bootsplash';
+import InAppReview from 'react-native-in-app-review';
 import InAppBrowser, {
   InAppBrowserOptions,
 } from 'react-native-inappbrowser-reborn';
@@ -19,7 +20,6 @@ import {
   requestNotifications,
   RESULTS,
 } from 'react-native-permissions';
-import {requestTrackingPermission} from 'react-native-tracking-transparency';
 import uuid from 'react-native-uuid';
 import {batch} from 'react-redux';
 import {AppActions} from '.';
@@ -28,7 +28,6 @@ import GraphQlApi from '../../api/graphql';
 import UserApi from '../../api/user';
 import {OnGoingProcessMessages} from '../../components/modal/ongoing-process/OngoingProcess';
 import {Network} from '../../constants';
-import Segment from '../../lib/segment';
 import {BuyCryptoScreens} from '../../navigation/services/buy-crypto/BuyCryptoStack';
 import {CardScreens} from '../../navigation/card/CardStack';
 import {CardActivationScreens} from '../../navigation/card-activation/CardActivationStack';
@@ -36,6 +35,7 @@ import {TabsScreens} from '../../navigation/tabs/TabsStack';
 import {WalletScreens} from '../../navigation/wallet/WalletStack';
 import {isAxiosError} from '../../utils/axios';
 import {sleep} from '../../utils/helper-methods';
+import {Analytics} from '../analytics/analytics.effects';
 import {BitPayIdEffects} from '../bitpay-id';
 import {CardEffects} from '../card';
 import {Card} from '../card/card.models';
@@ -44,12 +44,7 @@ import {Effect, RootState} from '../index';
 import {LocationEffects} from '../location';
 import {LogActions} from '../log';
 import {WalletActions} from '../wallet';
-import {walletConnectInit} from '../wallet-connect/wallet-connect.effects';
-import {
-  deferredImportMnemonic,
-  startMigration,
-  startWalletStoreInit,
-} from '../wallet/effects';
+import {startMigration, startWalletStoreInit} from '../wallet/effects';
 import {
   setAnnouncementsAccepted,
   setAppFirstOpenEventComplete,
@@ -59,6 +54,7 @@ import {
   setEmailNotificationsAccepted,
   setMigrationComplete,
   setNotificationsAccepted,
+  setUserFeedback,
   showBlur,
 } from './app.actions';
 import {AppIdentity} from './app.models';
@@ -75,7 +71,6 @@ import {
 import {createWalletAddress} from '../wallet/effects/address/address';
 import {DeviceEmitterEvents} from '../../constants/device-emitter-events';
 import {
-  APP_ANALYTICS_ENABLED,
   APP_DEEPLINK_PREFIX,
   APP_NAME,
   DOWNLOAD_BITPAY_URL,
@@ -97,6 +92,10 @@ import {ShortcutList} from '../../constants/shortcuts';
 import {goToBuyCrypto} from '../buy-crypto/buy-crypto.effects';
 import {goToSwapCrypto} from '../swap-crypto/swap-crypto.effects';
 import {receiveCrypto, sendCrypto} from '../wallet/effects/send/send';
+import moment from 'moment';
+import {FeedbackRateType} from '../../navigation/tabs/settings/about/screens/SendFeedback';
+import {walletConnectV2Init} from '../wallet-connect-v2/wallet-connect-v2.effects';
+import {walletConnectInit} from '../wallet-connect/wallet-connect.effects';
 
 // Subscription groups (Braze)
 const PRODUCTS_UPDATES_GROUP_ID = __DEV__
@@ -109,34 +108,47 @@ const OFFERS_AND_PROMOTIONS_GROUP_ID = __DEV__
 export const startAppInit = (): Effect => async (dispatch, getState) => {
   try {
     dispatch(LogActions.clear());
-    dispatch(LogActions.info(`Initializing app (${__DEV__ ? 'D' : 'P'})...`));
+    dispatch(
+      LogActions.info(
+        `Initializing app (${__DEV__ ? 'Development' : 'Production'})...`,
+      ),
+    );
 
-    const {APP, BITPAY_ID, WALLET} = getState();
+    dispatch(deferDeeplinksUntilAppIsReady());
+
+    const {APP, BITPAY_ID, CONTACT, WALLET} = getState();
     const {network, pinLockActive, biometricLockActive, colorScheme} = APP;
+
+    WALLET.initLogs.forEach(log => dispatch(log));
 
     dispatch(LogActions.debug(`Network: ${network}`));
     dispatch(LogActions.debug(`Theme: ${colorScheme || 'system'}`));
 
-    dispatch(deferDeeplinksUntilAppIsReady());
-
-    const {appFirstOpenData, onboardingCompleted, migrationComplete} =
-      getState().APP;
-
-    const {contactMigrationComplete} = getState().CONTACT;
-
-    if (!appFirstOpenData?.firstOpenDate) {
-      dispatch(setAppFirstOpenEventDate(Math.floor(Date.now() / 1000)));
-      dispatch(LogActions.info('success [setAppFirstOpenEventDate]'));
-    }
+    const {appFirstOpenData, onboardingCompleted, migrationComplete} = APP;
 
     // init analytics -> post onboarding or migration
     if (onboardingCompleted) {
-      await dispatch(askForTrackingPermissionAndEnableSdks(true));
+      await dispatch(Analytics.initialize());
       QuickActions.clearShortcutItems();
       QuickActions.setShortcutItems(ShortcutList);
     }
 
+    if (!appFirstOpenData?.firstOpenDate) {
+      const firstOpen = Math.floor(Date.now() / 1000);
+
+      dispatch(setAppFirstOpenEventDate(firstOpen));
+      dispatch(trackFirstOpenEvent(firstOpen));
+    } else {
+      dispatch(Analytics.track('Last Opened App'));
+
+      if (!appFirstOpenData?.firstOpenEventComplete) {
+        dispatch(trackFirstOpenEvent(appFirstOpenData.firstOpenDate));
+      }
+    }
+
     dispatch(startWalletStoreInit());
+
+    const {contactMigrationComplete} = CONTACT;
 
     if (!contactMigrationComplete) {
       await dispatch(startContactMigration());
@@ -156,7 +168,7 @@ export const startAppInit = (): Effect => async (dispatch, getState) => {
 
     dispatch(initializeApi(network, identity));
 
-    dispatch(LocationEffects.getCountry());
+    dispatch(LocationEffects.getLocationData());
 
     if (isPaired) {
       try {
@@ -204,16 +216,11 @@ export const startAppInit = (): Effect => async (dispatch, getState) => {
 
     // splitting inits into store specific ones as to keep it cleaner in the main init here
     dispatch(walletConnectInit());
+    dispatch(walletConnectV2Init());
     dispatch(initializeBrazeContent());
 
     // Update Coinbase
     dispatch(coinbaseInitialize());
-
-    // Deferred Import
-    if (WALLET.deferredImport) {
-      const {importData, opts} = WALLET.deferredImport;
-      dispatch(deferredImportMnemonic(importData, opts, 'deferredImport'));
-    }
 
     dispatch(showBlur(pinLockActive || biometricLockActive));
 
@@ -530,24 +537,33 @@ export const openUrlWithInAppBrowser =
       dispatch(LogActions.info(`Opening URL ${url} with ${handler}`));
 
       if (isIabAvailable) {
-        // successfully resolves after IAB is cancelled or dismissed
-        const result = await InAppBrowser.open(url, {
-          // iOS options
-          animated: true,
-          modalEnabled: true,
-          modalPresentationStyle: 'pageSheet',
+        try {
+          // successfully resolves after IAB is cancelled or dismissed
+          const result = await InAppBrowser.open(url, {
+            // iOS options
+            animated: true,
+            modalEnabled: true,
+            modalPresentationStyle: 'pageSheet',
 
-          // android options
-          forceCloseOnRedirection: false,
-          hasBackButton: true,
-          showInRecents: true,
+            // android options
+            forceCloseOnRedirection: false,
+            hasBackButton: true,
+            showInRecents: true,
 
-          ...options,
-        });
+            ...options,
+          });
 
-        dispatch(
-          LogActions.info(`InAppBrowser closed with type: ${result.type}`),
-        );
+          dispatch(
+            LogActions.info(`InAppBrowser closed with type: ${result.type}`),
+          );
+        } catch (err) {
+          const logMsg = `Error opening URL ${url} with ${handler}. Trying external browser.\n${JSON.stringify(
+            err,
+          )}`;
+          dispatch(LogActions.error(logMsg));
+          // if InAppBrowser is available but InAppBrowser.open fails, will try to open an external browser
+          await Linking.openURL(url);
+        }
       } else {
         // successfully resolves if an installed app handles the URL,
         // or the user confirms any presented 'open' dialog
@@ -562,117 +578,15 @@ export const openUrlWithInAppBrowser =
     }
   };
 
-export const askForTrackingPermissionAndEnableSdks =
-  (appInit: boolean = false): Effect<Promise<void>> =>
-  async (dispatch, getState) => {
+const trackFirstOpenEvent =
+  (date: number): Effect =>
+  dispatch => {
     dispatch(
-      LogActions.info('starting [askForTrackingPermissionAndEnableSdks]'),
-    );
-    const trackingStatus = await requestTrackingPermission();
-    const isAuthorizedByUser = ['authorized', 'unavailable'].includes(
-      trackingStatus,
-    );
-
-    if (APP_ANALYTICS_ENABLED && isAuthorizedByUser) {
-      dispatch(
-        LogActions.info('[askForTrackingPermissionAndEnableSdks] - setup init'),
-      );
-
-      try {
-        const {appFirstOpenData, appOpeningWasTracked, brazeEid} =
-          getState().APP;
-
-        if (!Segment.getClient()) {
-          await Segment.init({eid: brazeEid});
-        }
-
-        if (appInit) {
-          if (!appOpeningWasTracked && appFirstOpenData) {
-            const {firstOpenDate, firstOpenEventComplete} = appFirstOpenData;
-
-            if (firstOpenDate && !firstOpenEventComplete) {
-              dispatch(setAppFirstOpenEventComplete());
-              dispatch(
-                Analytics.track('First Opened App', {
-                  date: firstOpenDate || '',
-                }),
-              );
-            } else {
-              dispatch(Analytics.track('Last Opened App', {}));
-            }
-
-            dispatch(AppActions.appOpeningWasTracked());
-          }
-        }
-      } catch (err) {
-        dispatch(LogActions.error('Segment setup failed'));
-        dispatch(LogActions.error(JSON.stringify(err)));
-      }
-    }
-    dispatch(
-      LogActions.info('complete [askForTrackingPermissionAndEnableSdks]'),
+      Analytics.track('First Opened App', {date}, () => {
+        dispatch(setAppFirstOpenEventComplete());
+      }),
     );
   };
-
-/**
- * @deprecated Use `dispatch(Analytics.track(event, properties))` instead.
- */
-export const logSegmentEvent = (
-  _eventType: 'track',
-  event: string,
-  properties: JsonMap = {},
-) => {
-  return Analytics.track(event, properties);
-};
-
-export const Analytics = {
-  /**
-   * Makes a call to identify a user through the analytics SDK.
-   *
-   * @param user database ID (or email address) for this user.
-   * If you don't have a userId but want to record traits, you should pass nil.
-   * For more information on how we generate the UUID and Apple's policies on IDs, see https://segment.io/libraries/ios#ids
-   * @param traits A dictionary of traits you know about the user. Things like: email, name, plan, etc.
-   */
-  identify:
-    (
-      user: string | undefined,
-      traits?: UserTraits | undefined,
-    ): Effect<Promise<void>> =>
-    () => {
-      return Segment.identify(user, traits);
-    },
-
-  /**
-   * Makes a call to record a screen view through the analytics SDK.
-   *
-   * @param name The title of the screen being viewed.
-   * @param properties A dictionary of properties for the screen view event.
-   * If the event was 'Added to Shopping Cart', it might have properties like price, productType, etc.
-   */
-  screen:
-    (name: string, properties: JsonMap = {}): Effect<Promise<void>> =>
-    () => {
-      return Segment.screen(name, properties);
-    },
-
-  /**
-   * Record the actions your users perform through the analytics SDK.
-   *
-   * When a user performs an action in your app, you'll want to track that action for later analysis.
-   * Use the event name to say what the user did, and properties to specify any interesting details of the action.
-   *
-   * @param event The name of the event you're tracking.
-   * The SDK recommend using human-readable names like `Played a Song` or `Updated Status`.
-   * @param properties A dictionary of properties for the event.
-   * If the event was 'Added to Shopping Cart', it might have properties like price, productType, etc.
-   */
-  track:
-    (event: string, properties: JsonMap = {}): Effect<Promise<void>> =>
-    () => {
-      return Segment.track(`BitPay App - ${event}`, properties);
-    },
-};
 
 export const subscribePushNotifications =
   (walletClient: any, eid: string): Effect =>
@@ -951,9 +865,16 @@ export const handleBwsEvent =
         case 'TxProposalRejectedBy':
         case 'TxProposalRemoved':
         case 'NewOutgoingTx':
-        case 'NewIncomingTx':
         case 'NewTxProposal':
         case 'TxConfirmation':
+          _startUpdateWalletStatus(dispatch, keyObj, wallet);
+          break;
+        case 'NewIncomingTx':
+          Analytics.track('BitPay App - Funded Wallet', {
+            walletType: wallet.credentials.addressType,
+            cryptoType: wallet.credentials.coin,
+            cryptoAmount: true,
+          });
           _startUpdateWalletStatus(dispatch, keyObj, wallet);
           break;
       }
@@ -1087,7 +1008,15 @@ export const incomingLink =
 
     let handler: (() => void) | null = null;
 
-    if (pathSegments[0] === 'buy-crypto') {
+    if (pathSegments[0] === 'feedback') {
+      if (pathSegments[1] === 'rate') {
+        handler = () => {
+          setTimeout(() => {
+            dispatch(requestInAppReview());
+          }, 500);
+        };
+      }
+    } else if (pathSegments[0] === 'buy-crypto') {
       handler = () => {
         navigationRef.navigate(RootStacks.BUY_CRYPTO, {
           screen: BuyCryptoScreens.ROOT,
@@ -1219,6 +1148,57 @@ export const shareApp = (): Effect<Promise<void>> => async dispatch => {
   }
 };
 
+export const isVersionUpdated = (
+  currentVersion: string,
+  savedVersion: string,
+): boolean => {
+  const verifyTagFormat = (tag: string) => {
+    const regex = /^v?\d+\.\d+\.\d+$/i;
+    return regex.exec(tag);
+  };
+
+  const formatTagNumber = (tag: string) => {
+    const formattedNumber = tag.replace(/^v/i, '').split('.');
+    return {
+      major: +formattedNumber[0],
+      minor: +formattedNumber[1],
+      patch: +formattedNumber[2],
+    };
+  };
+
+  if (!verifyTagFormat(currentVersion)) {
+    LogActions.error(
+      'Cannot verify the format of version tag: ' + currentVersion,
+    );
+  }
+  if (!verifyTagFormat(savedVersion)) {
+    LogActions.error(
+      'Cannot verify the format of the saved version tag: ' + savedVersion,
+    );
+  }
+
+  const current = formatTagNumber(currentVersion);
+  const saved = formatTagNumber(savedVersion);
+  if (saved.major === current.major && saved.minor === current.minor) {
+    return true;
+  }
+
+  return false;
+};
+
+export const saveUserFeedback =
+  (rate: FeedbackRateType, version: string, sent: boolean): Effect<any> =>
+  dispatch => {
+    dispatch(
+      setUserFeedback({
+        time: moment().unix(),
+        version,
+        sent,
+        rate,
+      }),
+    );
+  };
+
 export const shortcutListener =
   (item: ShortcutItem, navigation: NavigationProp<any>): Effect<void> =>
   dispatch => {
@@ -1239,5 +1219,44 @@ export const shortcutListener =
       case 'share':
         dispatch(shareApp());
         return;
+    }
+  };
+
+/**
+ * Requests an in-app review UI from the device. Due to review quotas set by
+ * Apple/Google, request is not guaranteed to be granted and it is possible
+ * that nothing will be presented to the user.
+ *
+ * @returns
+ */
+export const requestInAppReview =
+  (): Effect<Promise<void>> => async dispatch => {
+    try {
+      // Whether the device supports app ratings
+      const isAvailable = InAppReview.isAvailable();
+
+      if (!isAvailable) {
+        dispatch(LogActions.debug('In-app review not available.'));
+        return;
+      }
+
+      dispatch(LogActions.debug('Requesting in-app review...'));
+
+      // Android - true means the user finished or closed the review flow successfully, but does not indicate if the user left a review
+      // iOS - true means the rating flow was launched successfully, but does not indicate if the user left a review
+      const hasFlowFinishedSuccessfully =
+        await InAppReview.RequestInAppReview();
+
+      dispatch(
+        LogActions.debug(
+          `In-app review completed successfully: ${!!hasFlowFinishedSuccessfully}`,
+        ),
+      );
+    } catch (e: any) {
+      dispatch(
+        LogActions.debug(
+          `Failed to request in-app review: ${e?.message || JSON.stringify(e)}`,
+        ),
+      );
     }
   };

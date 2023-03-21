@@ -5,7 +5,11 @@ import {AltCurrenciesRowProps} from '../../components/list/AltCurrenciesRow';
 import {BottomNotificationConfig} from '../../components/modal/bottom-notification/BottomNotification';
 import {PinModalConfig} from '../../components/modal/pin/PinModal';
 import {Network} from '../../constants';
-import {APP_NETWORK, BASE_BITPAY_URLS} from '../../constants/config';
+import {
+  APP_NETWORK,
+  APP_VERSION,
+  BASE_BITPAY_URLS,
+} from '../../constants/config';
 import {SettingsListType} from '../../navigation/tabs/settings/SettingsRoot';
 import {DecryptPasswordConfig} from '../../navigation/wallet/components/DecryptEnterPasswordModal';
 import {NavScreenParams, RootStackParamList} from '../../Root';
@@ -17,11 +21,12 @@ import {
 import {AppActionType, AppActionTypes} from './app.types';
 import uniqBy from 'lodash.uniqby';
 import {BiometricModalConfig} from '../../components/modal/biometric/BiometricModal';
+import {FeedbackRateType} from '../../navigation/tabs/settings/about/screens/SendFeedback';
+import moment from 'moment';
 
 export const appReduxPersistBlackList: Array<keyof AppState> = [
   'appIsLoading',
   'appWasInit',
-  'appOpeningWasTracked',
   'showOnGoingProcessModal',
   'onGoingProcessModalMessage',
   'showDecryptPasswordModal',
@@ -33,9 +38,17 @@ export const appReduxPersistBlackList: Array<keyof AppState> = [
   'activeModalId',
   'failedAppInit',
   'brazeContentCardSubscription',
+  'expectedKeyLengthChange',
 ];
 
 export type ModalId = 'sheetModal' | 'ongoingProcess' | 'pin';
+
+export type FeedbackType = {
+  time: number;
+  version: string;
+  sent: boolean;
+  rate: FeedbackRateType;
+};
 
 export type AppFirstOpenData = {
   firstOpenEventComplete: boolean;
@@ -62,8 +75,8 @@ export interface AppState {
    */
   appIsReadyForDeeplinking: boolean;
   appFirstOpenData: AppFirstOpenData;
-  appOpeningWasTracked: boolean;
   introCompleted: boolean;
+  userFeedback: FeedbackType;
   onboardingCompleted: boolean;
   showOnGoingProcessModal: boolean;
   onGoingProcessModalMessage: string | undefined;
@@ -109,8 +122,8 @@ export interface AppState {
   activeModalId: ModalId | null;
   failedAppInit: boolean;
   checkingBiometricForSending: boolean;
-  onCompleteOnboardingList: Array<string>;
   hasViewedZenLedgerWarning: boolean;
+  expectedKeyLengthChange: number;
 }
 
 const initialState: AppState = {
@@ -132,8 +145,13 @@ const initialState: AppState = {
   appWasInit: false,
   appIsReadyForDeeplinking: false,
   appFirstOpenData: {firstOpenEventComplete: false, firstOpenDate: undefined},
-  appOpeningWasTracked: false,
   introCompleted: false,
+  userFeedback: {
+    time: moment().unix(),
+    version: APP_VERSION,
+    sent: false,
+    rate: 'default',
+  },
   onboardingCompleted: false,
   showOnGoingProcessModal: false,
   onGoingProcessModalMessage: undefined,
@@ -179,8 +197,8 @@ const initialState: AppState = {
   activeModalId: null,
   failedAppInit: false,
   checkingBiometricForSending: false,
-  onCompleteOnboardingList: [],
   hasViewedZenLedgerWarning: false,
+  expectedKeyLengthChange: 0,
 };
 
 export const appReducer = (
@@ -228,12 +246,6 @@ export const appReducer = (
           ...state.appFirstOpenData,
           firstOpenDate: action.payload,
         },
-      };
-
-    case AppActionTypes.APP_OPENING_WAS_TRACKED:
-      return {
-        ...state,
-        appOpeningWasTracked: true,
       };
 
     case AppActionTypes.SET_ONBOARDING_COMPLETED:
@@ -558,25 +570,22 @@ export const appReducer = (
         checkingBiometricForSending: action.payload,
       };
 
-    case AppActionTypes.UPDATE_ON_COMPLETE_ONBOARDING_LIST:
-      const _onCompleteOnboardingList = state.onCompleteOnboardingList;
-      if (!_onCompleteOnboardingList.includes(action.payload)) {
-        _onCompleteOnboardingList.push(action.payload);
-      }
-      return {
-        ...state,
-        onCompleteOnboardingList: _onCompleteOnboardingList,
-      };
-
-    case AppActionTypes.CLEAR_ON_COMPLETE_ONBOARDING_LIST:
-      return {
-        ...state,
-        onCompleteOnboardingList: [],
-      };
     case AppActionTypes.SET_HAS_VIEWED_ZENLEDGER_WARNING:
       return {
         ...state,
         hasViewedZenLedgerWarning: true,
+      };
+
+    case AppActionTypes.USER_FEEDBACK:
+      return {
+        ...state,
+        userFeedback: action.payload,
+      };
+
+    case AppActionTypes.EXPECTED_KEY_LENGTH_CHANGE:
+      return {
+        ...state,
+        expectedKeyLengthChange: action.payload,
       };
 
     default:

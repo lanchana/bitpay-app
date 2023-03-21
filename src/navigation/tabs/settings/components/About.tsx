@@ -14,11 +14,12 @@ import {useTranslation} from 'react-i18next';
 import {View} from 'react-native';
 import {useDispatch} from 'react-redux';
 import {
-  logSegmentEvent,
   openUrlWithInAppBrowser,
+  shareApp,
 } from '../../../../store/app/app.effects';
 import AngleRight from '../../../../../assets/img/angle-right.svg';
 import {GIT_COMMIT_HASH} from '@env';
+import {Analytics} from '../../../../store/analytics/analytics.effects';
 
 interface LinkSetting {
   key: string;
@@ -75,6 +76,14 @@ const About = () => {
       ) : null}
 
       <Setting
+        onPress={() => navigation.navigate('About', {screen: 'StorageUsage'})}>
+        <SettingTitle>{t('Storage Usage')}</SettingTitle>
+        <AngleRight />
+      </Setting>
+
+      <Hr />
+
+      <Setting
         onPress={() => navigation.navigate('About', {screen: 'SessionLogs'})}>
         <SettingTitle>{t('Session Log')}</SettingTitle>
         <AngleRight />
@@ -89,6 +98,12 @@ const About = () => {
       </Setting>
 
       <Hr />
+
+      <Setting onPress={() => dispatch(shareApp())}>
+        <SettingTitle>{t('Share with Friends')}</SettingTitle>
+      </Setting>
+
+      <Hr />
       {LINKS.map(({key, title, link}, index) => {
         return (
           <View key={key}>
@@ -100,7 +115,7 @@ const About = () => {
                     ? 'Clicked Support'
                     : 'Clicked About BitPay Link';
                 dispatch(
-                  logSegmentEvent('track', segmentEvent, {
+                  Analytics.track(segmentEvent, {
                     key,
                   }),
                 );

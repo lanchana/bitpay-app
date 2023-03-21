@@ -33,6 +33,7 @@ export interface TermsOfUseParamList {
 export interface TermsOfUseModel {
   id: number;
   statement: ReactElement;
+  accessibilityLabel: string;
 }
 
 const StatementText = styled(Paragraph)`
@@ -74,7 +75,7 @@ const TermsOfUse: React.FC<TermsOfUseScreenProps> = ({route}) => {
   const {key, context} = route.params || {};
   const [agreed, setAgreed] = useState<number[]>([]);
 
-  const askForTrackingThenNavigate = useRequestTrackingPermissionHandler(true);
+  const askForTrackingThenNavigate = useRequestTrackingPermissionHandler();
 
   const Terms: Array<TermsOfUseModel> = [
     {
@@ -88,6 +89,7 @@ const TermsOfUse: React.FC<TermsOfUseScreenProps> = ({route}) => {
           .
         </StatementText>
       ),
+      accessibilityLabel: 'first-term-checkbox',
     },
     {
       id: 2,
@@ -110,6 +112,7 @@ const TermsOfUse: React.FC<TermsOfUseScreenProps> = ({route}) => {
           .
         </StatementText>
       ),
+      accessibilityLabel: 'second-term-checkbox',
     },
     {
       id: 3,
@@ -121,12 +124,13 @@ const TermsOfUse: React.FC<TermsOfUseScreenProps> = ({route}) => {
           </StatementLink>
         </StatementText>
       ),
+      accessibilityLabel: 'third-term-checkbox',
     },
   ];
   const [termsList] = useState(() => {
     if (context === 'TOUOnly') {
       return Terms.filter(term => term.id === 3);
-    } else if (key || context === 'deferredImport') {
+    } else if (key) {
       return Terms.filter(term => term.id !== 3);
     }
 
@@ -149,7 +153,7 @@ const TermsOfUse: React.FC<TermsOfUseScreenProps> = ({route}) => {
   };
 
   return (
-    <TermsOfUseContainer>
+    <TermsOfUseContainer accessibilityLabel="terms-of-use-container">
       <ScrollView>
         <TermsContainer>
           <StatementText>{t('I understand that:')}</StatementText>
@@ -159,8 +163,9 @@ const TermsOfUse: React.FC<TermsOfUseScreenProps> = ({route}) => {
         </TermsContainer>
       </ScrollView>
 
-      <CtaContainerAbsolute>
+      <CtaContainerAbsolute accessibilityLabel="cta-container">
         <Button
+          accessibilityLabel="agree-and-continue-button"
           onPress={() => {
             askForTrackingThenNavigate(() => {
               if (agreed.length >= 2) {

@@ -1,12 +1,13 @@
 import {getMoonpayFiatAmountLimits} from '../../navigation/services/buy-crypto/utils/moonpay-utils';
+import {getRampFiatAmountLimits} from '../../navigation/services/buy-crypto/utils/ramp-utils';
 import {getSimplexFiatAmountLimits} from '../../navigation/services/buy-crypto/utils/simplex-utils';
 import {WalletScreens} from '../../navigation/wallet/WalletStack';
 import {navigationRef} from '../../Root';
-import {logSegmentEvent} from '../app/app.effects';
 import {getWyreFiatAmountLimits} from '../../navigation/services/buy-crypto/utils/wyre-utils';
 import {Effect} from '../index';
 import {LogActions} from '../log';
 import {BuyCryptoLimits} from './buy-crypto.models';
+import {Analytics} from '../analytics/analytics.effects';
 
 export const calculateAltFiatToUsd =
   (
@@ -78,7 +79,7 @@ export const getBuyCryptoFiatLimits =
   (exchange?: string, fiatCurrency?: string): Effect<BuyCryptoLimits> =>
   (dispatch, getState) => {
     const state = getState();
-    const country = state.LOCATION.countryData;
+    const locationData = state.LOCATION.locationData;
     let limits: BuyCryptoLimits = {min: undefined, max: undefined};
     let baseFiatArray: string[];
 
@@ -93,26 +94,34 @@ export const getBuyCryptoFiatLimits =
         baseFiatArray = ['USD', 'EUR'];
         limits = getMoonpayFiatAmountLimits();
         break;
+      case 'ramp':
+        baseFiatArray = ['USD', 'EUR'];
+        limits = getRampFiatAmountLimits();
+        break;
       case 'simplex':
         baseFiatArray = ['USD'];
         limits = getSimplexFiatAmountLimits();
         break;
       case 'wyre':
         baseFiatArray = ['USD', 'EUR'];
-        limits = getWyreFiatAmountLimits(country?.shortCode || 'US');
+        limits = getWyreFiatAmountLimits(
+          locationData?.countryShortCode || 'US',
+        );
         break;
       default:
         baseFiatArray = ['USD', 'EUR'];
         limits = {
           min: Math.min(
             getMoonpayFiatAmountLimits().min,
+            getRampFiatAmountLimits().min,
             getSimplexFiatAmountLimits().min,
-            getWyreFiatAmountLimits(country?.shortCode || 'US').min,
+            getWyreFiatAmountLimits(locationData?.countryShortCode || 'US').min,
           ),
           max: Math.max(
             getMoonpayFiatAmountLimits().max,
+            getRampFiatAmountLimits().max,
             getSimplexFiatAmountLimits().max,
-            getWyreFiatAmountLimits(country?.shortCode || 'US').max,
+            getWyreFiatAmountLimits(locationData?.countryShortCode || 'US').max,
           ),
         };
         break;
@@ -134,7 +143,7 @@ export const getBuyCryptoFiatLimits =
 
 export const goToBuyCrypto = (): Effect<void> => dispatch => {
   dispatch(
-    logSegmentEvent('track', 'Clicked Buy Crypto', {
+    Analytics.track('Clicked Buy Crypto', {
       context: 'Shortcuts',
     }),
   );
