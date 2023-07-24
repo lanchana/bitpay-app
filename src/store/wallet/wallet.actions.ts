@@ -17,7 +17,10 @@ export const failedWalletStoreInit = (): WalletActionType => ({
   type: WalletActionTypes.FAILED_WALLET_STORE_INIT,
 });
 
-export const successCreateKey = (payload: {key: Key}): WalletActionType => ({
+export const successCreateKey = (payload: {
+  key: Key;
+  lengthChange: number;
+}): WalletActionType => ({
   type: WalletActionTypes.SUCCESS_CREATE_KEY,
   payload,
 });
@@ -65,7 +68,10 @@ export const successEncryptOrDecryptPassword = (payload: {
   payload,
 });
 
-export const deleteKey = (payload: {keyId: string}): WalletActionType => ({
+export const deleteKey = (payload: {
+  keyId: string;
+  lengthChange: number;
+}): WalletActionType => ({
   type: WalletActionTypes.DELETE_KEY,
   payload,
 });
@@ -226,23 +232,16 @@ export const toggleHideWallet = (payload: {
   payload,
 });
 
-export const toggleHideBalance = (payload: {
-  wallet: Wallet;
-}): WalletActionType => ({
-  type: WalletActionTypes.TOGGLE_HIDE_BALANCE,
-  payload,
-});
-
-export const toggleHideKeyBalance = (payload: {
-  keyId: string;
-}): WalletActionType => ({
-  type: WalletActionTypes.TOGGLE_HIDE_KEY_BALANCE,
-  payload,
-});
-
 export const updateCacheFeeLevel = (
   payload: CacheFeeLevel,
 ): WalletActionType => ({
   type: WalletActionTypes.UPDATE_CACHE_FEE_LEVEL,
   payload,
+});
+
+export const setExpectedKeyLengthChange = (
+  lengthChange: number,
+): WalletActionType => ({
+  type: WalletActionTypes.EXPECTED_KEY_LENGTH_CHANGE,
+  payload: lengthChange,
 });

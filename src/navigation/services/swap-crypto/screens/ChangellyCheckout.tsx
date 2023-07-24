@@ -92,6 +92,7 @@ import SelectorArrowRight from '../../../../../assets/img/selector-arrow-right.s
 import {useTranslation} from 'react-i18next';
 import {RootState} from '../../../../store';
 import {Analytics} from '../../../../store/analytics/analytics.effects';
+import {changellyGetTransactions} from '../../../../store/swap-crypto/effects/changelly/changelly';
 
 // Styled
 export const SwapCheckoutContainer = styled.SafeAreaView`
@@ -107,6 +108,8 @@ export interface ChangellyCheckoutProps {
   useSendMax?: boolean;
   sendMaxInfo?: SendMaxInfo;
 }
+
+let countDown: NodeJS.Timer | undefined;
 
 const ChangellyCheckout: React.FC = () => {
   let {
@@ -243,21 +246,39 @@ const ChangellyCheckout: React.FC = () => {
           return;
         }
 
-        if (
-          Number(data.result.changellyFee) > 0 ||
-          Number(data.result.apiExtraFee > 0)
-        ) {
+        let changellyFee = 0;
+        let apiExtraFee = 0;
+
+        if (data.result.changellyFee && data.result.apiExtraFee) {
+          changellyFee = Number(data.result.changellyFee);
+          apiExtraFee = Number(data.result.apiExtraFee);
+        } else {
+          try {
+            const transactionData = await changellyGetTransactions(
+              data.result.id,
+            );
+            if (transactionData.result[0]) {
+              if (Number(transactionData.result[0].changellyFee) > 0) {
+                changellyFee = Number(transactionData.result[0].changellyFee);
+              }
+              if (Number(transactionData.result[0].apiExtraFee) > 0) {
+                apiExtraFee = Number(transactionData.result[0].apiExtraFee);
+              }
+            }
+          } catch (e) {
+            logger.warn(
+              `Error getting transactionData with id: ${data.result.id}`,
+            );
+          }
+        }
+
+        if (changellyFee >= 0 && apiExtraFee >= 0) {
           // changellyFee and apiExtraFee (Bitpay fee) are in percents
-          const receivingPercentage =
-            100 -
-            Number(data.result.changellyFee) -
-            Number(data.result.apiExtraFee);
+          const receivingPercentage = 100 - changellyFee - apiExtraFee;
           let exchangeFee =
-            (Number(data.result.changellyFee) * data.result.amountTo) /
-            receivingPercentage;
+            (changellyFee * data.result.amountExpectedTo) / receivingPercentage;
           let bitpayFee =
-            (Number(data.result.apiExtraFee) * data.result.amountTo) /
-            receivingPercentage;
+            (apiExtraFee * data.result.amountExpectedTo) / receivingPercentage;
           setTotalExchangeFee(exchangeFee + bitpayFee);
           logger.debug(
             `Changelly fee: ${exchangeFee} - BitPay fee: ${bitpayFee} - Total fee: ${
@@ -266,7 +287,6 @@ const ChangellyCheckout: React.FC = () => {
           );
         }
 
-        // TODO: handle payin address for BCH
         if (fromWalletSelected.currencyAbbreviation.toLowerCase() === 'bch') {
           payinAddress = BWC.getBitcoreCash()
             .Address(data.result.payinAddress)
@@ -279,8 +299,8 @@ const ChangellyCheckout: React.FC = () => {
           ? data.result.payinExtraId
           : undefined; // (destinationTag) Used for coins like: XRP, XLM, EOS, IGNIS, BNB, XMR, ARDOR, DCT, XEM
         setExchangeTxId(data.result.id);
-        setAmountExpectedFrom(data.result.amountExpectedFrom);
-        setAmountTo(Number(data.result.amountTo));
+        setAmountExpectedFrom(Number(data.result.amountExpectedFrom));
+        setAmountTo(Number(data.result.amountExpectedTo));
         status = data.result.status;
 
         try {
@@ -293,7 +313,7 @@ const ChangellyCheckout: React.FC = () => {
           );
           const newFiatAmountTo = dispatch(
             toFiat(
-              Number(amountTo) * presicion!.unitToSatoshi,
+              Number(data.result.amountExpectedTo) * presicion!.unitToSatoshi,
               alternativeIsoCode,
               toWalletSelected.currencyAbbreviation.toLowerCase(),
               toWalletSelected.chain,
@@ -368,14 +388,14 @@ const ChangellyCheckout: React.FC = () => {
     setPaymentExpired(false);
     setExpirationTime(expirationTime);
 
-    const countDown = setInterval(() => {
+    countDown = setInterval(() => {
       setExpirationTime(expirationTime, countDown);
     }, 1000);
   };
 
   const setExpirationTime = (
     expirationTime: number,
-    countDown?: NodeJS.Timeout,
+    countDown?: NodeJS.Timer,
   ): void => {
     const now = Math.floor(Date.now() / 1000);
 
@@ -673,6 +693,12 @@ const ChangellyCheckout: React.FC = () => {
   useEffect(() => {
     dispatch(startOnGoingProcessModal('EXCHANGE_GETTING_DATA'));
     createFixTransaction(1);
+
+    return () => {
+      if (countDown) {
+        clearInterval(countDown);
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -776,17 +802,18 @@ const ChangellyCheckout: React.FC = () => {
               )}
             </RowDataContainer>
             <ItemDivisor />
-            <RowDataContainer>
-              <RowLabel>{t('Exchange Fee')}</RowLabel>
-              {!!totalExchangeFee && (
-                <RowData>
-                  {' '}
-                  {Number(totalExchangeFee).toFixed(6)}{' '}
-                  {toWalletSelected.currencyAbbreviation.toUpperCase()}
-                </RowData>
-              )}
-            </RowDataContainer>
-            <ItemDivisor />
+            {totalExchangeFee ? (
+              <>
+                <RowDataContainer>
+                  <RowLabel>{t('Exchange Fee')}</RowLabel>
+                  <RowData>
+                    {Number(totalExchangeFee).toFixed(6)}{' '}
+                    {toWalletSelected.currencyAbbreviation.toUpperCase()}
+                  </RowData>
+                </RowDataContainer>
+                <ItemDivisor />
+              </>
+            ) : null}
             <RowDataContainer>
               <RowLabel>{t('Expires')}</RowLabel>
               {!!remainingTimeStr && (
@@ -816,7 +843,7 @@ const ChangellyCheckout: React.FC = () => {
               <>
                 <FiatAmountContainer>
                   <FiatAmount>
-                    ~{fiatAmountTo} {alternativeIsoCode}
+                    ~{fiatAmountTo.toFixed(2)} {alternativeIsoCode}
                   </FiatAmount>
                 </FiatAmountContainer>
               </>

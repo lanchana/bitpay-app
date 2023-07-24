@@ -14,6 +14,7 @@ import SwipeButton from '../../../../../components/swipe-button/SwipeButton';
 import {
   createProposalAndBuildTxDetails,
   handleCreateTxProposalError,
+  showConfirmAmountInfoSheet,
   startSendPayment,
 } from '../../../../../store/wallet/effects/send/send';
 import PaymentSent from '../../../components/PaymentSent';
@@ -30,7 +31,7 @@ import {
   Amount,
   ConfirmContainer,
   ConfirmScrollView,
-  DetailsList,
+  DetailsListNoScroll,
   ExchangeRate,
   Fee,
   Header,
@@ -50,6 +51,8 @@ import {
   BaseText,
   HeaderTitle,
   InfoDescription,
+  InfoHeader,
+  InfoTitle,
   Link,
 } from '../../../../../components/styled/Text';
 import styled from 'styled-components/native';
@@ -59,17 +62,28 @@ import {
   ActiveOpacity,
   Hr,
   Info,
+  InfoImageContainer,
   InfoTriangle,
   ScreenGutter,
 } from '../../../../../components/styled/Containers';
 import {Platform, TouchableOpacity} from 'react-native';
-import {GetFeeOptions} from '../../../../../store/wallet/effects/fee/fee';
+import {
+  GetFeeOptions,
+  getFeeRatePerKb,
+} from '../../../../../store/wallet/effects/fee/fee';
 import haptic from '../../../../../components/haptic-feedback/haptic';
 import {Memo} from './Memo';
 import {toFiat} from '../../../../../store/wallet/utils/wallet';
-import {GetPrecision} from '../../../../../store/wallet/utils/currency';
+import {
+  GetFeeUnits,
+  GetPrecision,
+  IsERCToken,
+} from '../../../../../store/wallet/utils/currency';
 import prompt from 'react-native-prompt-android';
 import {Analytics} from '../../../../../store/analytics/analytics.effects';
+import SendingToERC20Warning from '../../../components/SendingToERC20Warning';
+import {HIGH_FEE_LIMIT} from '../../../../../constants/wallet';
+import WarningSvg from '../../../../../../assets/img/warning.svg';
 
 const VerticalPadding = styled.View`
   padding: ${ScreenGutter} 0;
@@ -138,7 +152,10 @@ const Confirm = () => {
   const [showPaymentSentModal, setShowPaymentSentModal] = useState(false);
   const [resetSwipeButton, setResetSwipeButton] = useState(false);
   const [showTransactionLevel, setShowTransactionLevel] = useState(false);
-  const [enableRBF, setEnableRBF] = useState(false);
+  const [enableRBF, setEnableRBF] = useState(enableReplaceByFee);
+  const [showSendingERC20Modal, setShowSendingERC20Modal] = useState(true);
+  const [showHighFeeWarningMessage, setShowHighFeeWarningMessage] =
+    useState(false);
 
   const {
     fee: _fee,
@@ -180,7 +197,7 @@ const Confirm = () => {
     const includedCurrencies = ['btc', 'eth', 'matic'];
     // TODO: exclude paypro, coinbase, usingMerchantFee txs,
     // const {payProUrl} = txDetails;
-    return includedCurrencies.includes(currencyAbbreviation);
+    return includedCurrencies.includes(currencyAbbreviation.toLowerCase());
   };
 
   const onCloseTxLevelModal = async (
@@ -314,6 +331,23 @@ const Confirm = () => {
     [dispatch],
   );
 
+  const checkHighFees = async () => {
+    const {feeUnitAmount} = dispatch(GetFeeUnits(currencyAbbreviation, chain));
+    let feePerKb: number;
+    if (txp.feePerKb) {
+      feePerKb = txp.feePerKb;
+    } else {
+      feePerKb = await getFeeRatePerKb({wallet, feeLevel: fee.feeLevel});
+    }
+    setShowHighFeeWarningMessage(
+      feePerKb / feeUnitAmount >= HIGH_FEE_LIMIT[chain] && txp.amount !== 0,
+    );
+  };
+
+  useEffect(() => {
+    checkHighFees();
+  }, [fee]);
+
   let recipientData, recipientListData;
 
   if (recipientList) {
@@ -358,7 +392,7 @@ const Confirm = () => {
         extraScrollHeight={50}
         contentContainerStyle={{paddingBottom: 50}}
         keyboardShouldPersistTaps={'handled'}>
-        <DetailsList keyboardShouldPersistTaps={'handled'}>
+        <DetailsListNoScroll keyboardShouldPersistTaps={'handled'}>
           <Header>Summary</Header>
           <SendingTo
             recipient={recipientData}
@@ -373,11 +407,33 @@ const Confirm = () => {
             }
             fee={fee}
             feeOptions={feeOptions}
-            hr
+            hr={!showHighFeeWarningMessage}
           />
+          {showHighFeeWarningMessage ? (
+            <>
+              <Info>
+                <InfoTriangle />
+                <InfoHeader>
+                  <InfoImageContainer infoMargin={'0 8px 0 0'}>
+                    <WarningSvg />
+                  </InfoImageContainer>
+
+                  <InfoTitle>
+                    {t('Transaction fees are currently high')}
+                  </InfoTitle>
+                </InfoHeader>
+                <InfoDescription>
+                  {t(
+                    'Due to high demand, miner fees are high. Fees are paid to miners who process transactions and are not paid to BitPay.',
+                  )}
+                </InfoDescription>
+              </Info>
+              <Hr />
+            </>
+          ) : null}
           {enableReplaceByFee &&
           !selectInputs &&
-          currencyAbbreviation === 'btc' ? (
+          currencyAbbreviation.toLowerCase() === 'btc' ? (
             <>
               <Setting activeOpacity={1}>
                 <SettingTitle>{t('Enable Replace-By-Fee')}</SettingTitle>
@@ -474,8 +530,12 @@ const Confirm = () => {
             height={83}
             chain={chain}
             network={wallet.credentials.network}
+            showInfoIcon={!!subTotal}
+            infoIconOnPress={() => {
+              dispatch(showConfirmAmountInfoSheet('total'));
+            }}
           />
-        </DetailsList>
+        </DetailsListNoScroll>
 
         <PaymentSent
           isVisible={showPaymentSentModal}
@@ -535,6 +595,15 @@ const Confirm = () => {
           />
         ) : null}
       </ConfirmScrollView>
+      {wallet && IsERCToken(wallet.currencyAbbreviation, wallet.chain) ? (
+        <SendingToERC20Warning
+          isVisible={showSendingERC20Modal}
+          closeModal={() => {
+            setShowSendingERC20Modal(false);
+          }}
+          wallet={wallet}
+        />
+      ) : null}
       <SwipeButton
         title={speedup ? t('Speed Up') : t('Slide to send')}
         forceReset={resetSwipeButton}

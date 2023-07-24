@@ -63,6 +63,7 @@ import {BottomNotificationConfig} from '../../../components/modal/bottom-notific
 import SwipeButton from '../../../components/swipe-button/SwipeButton';
 import {publishAndSignMultipleProposals} from '../../../store/wallet/effects/send/send';
 import {Analytics} from '../../../store/analytics/analytics.effects';
+import {TransactionIcons} from '../../../constants/TransactionIcons';
 
 const NotificationsContainer = styled.SafeAreaView`
   flex: 1;
@@ -101,7 +102,7 @@ const ProposalsInfoContainer = styled.View`
 const CheckBoxContainer = styled.View`
   flex-direction: column;
   justify-content: center;
-  margin-left: 15px;
+  margin-left: 5px;
   margin-right: 15px;
 `;
 
@@ -117,6 +118,7 @@ const TransactionProposalNotifications = () => {
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const {keys} = useAppSelector(({WALLET}) => WALLET);
+  const contactList = useAppSelector(({CONTACT}) => CONTACT.list);
   const wallets = keyId
     ? keys[keyId].wallets
     : Object.values(keys).flatMap(k => k.wallets);
@@ -421,12 +423,17 @@ const TransactionProposalNotifications = () => {
                 <ProposalsContainer key={txp.id}>
                   <ProposalsInfoContainer>
                     <TransactionProposalRow
-                      icon={txp.uiIcon}
+                      icon={TransactionIcons[txp.uiIcon]}
                       creator={txp.uiCreator}
                       time={txp.uiTime}
                       value={txp.uiValue}
+                      message={txp.message}
                       onPressTransaction={() => onPressTxp(txp, fullWalletObj)}
                       hideIcon={true}
+                      recipientCount={txp.recipientCount}
+                      toAddress={txp.toAddress}
+                      chain={txp.chain}
+                      contactList={contactList}
                     />
                   </ProposalsInfoContainer>
                   {item.needSign ? (

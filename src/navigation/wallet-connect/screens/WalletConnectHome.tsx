@@ -29,11 +29,7 @@ import {
 } from '../../../store/app/app.actions';
 import Clipboard from '@react-native-community/clipboard';
 import CopiedSvg from '../../../../assets/img/copied-success.svg';
-import {
-  FormatAmount,
-  FormatAmountStr,
-} from '../../../store/wallet/effects/amount/amount';
-import {createProposalAndBuildTxDetails} from '../../../store/wallet/effects/send/send';
+import {FormatAmountStr} from '../../../store/wallet/effects/amount/amount';
 import {Wallet} from '../../../store/wallet/wallet.models';
 import {useTranslation} from 'react-i18next';
 import {startOnGoingProcessModal} from '../../../store/app/app.effects';
@@ -51,22 +47,17 @@ import {
   WCV2SessionType,
 } from '../../../store/wallet-connect-v2/wallet-connect-v2.models';
 import {WALLET_CONNECT_SUPPORTED_CHAINS} from '../../../constants/WalletConnectV2';
-import {
-  IWCConnector,
-  IWCRequest,
-} from '../../../store/wallet-connect/wallet-connect.models';
-import WalletConnect from '@walletconnect/client';
-import {RootState} from '../../../store';
 import {BottomNotificationConfig} from '../../../components/modal/bottom-notification/BottomNotification';
 import {CustomErrorMessage} from '../../wallet/components/ErrorMessages';
 import {BWCErrorMessage} from '../../../constants/BWCError';
 import {WalletConnectHeader} from '../WalletConnectStack';
 import TrashIcon from '../../../../assets/img/wallet-connect/trash-icon.svg';
+import {InAppNotificationContextType} from '../../../store/app/app.models';
 
 export type WalletConnectHomeParamList = {
   topic?: string;
-  peerId?: string;
   wallet: Wallet;
+  context?: InAppNotificationContextType;
 };
 
 const SummaryContainer = styled.View`
@@ -104,19 +95,8 @@ const WalletConnectHome = () => {
   const [accountDisconnected, setAccountDisconnected] = useState(false);
   const [clipboardObj, setClipboardObj] = useState({copied: false, type: ''});
   const {
-    params: {topic, wallet, peerId},
+    params: {topic, wallet, context},
   } = useRoute<RouteProp<{params: WalletConnectHomeParamList}>>();
-  const version: number = peerId ? 1 : 2;
-  // version 1
-  const connectorV1: IWCConnector | undefined = useAppSelector(
-    ({WALLET_CONNECT}) => {
-      return WALLET_CONNECT.connectors.find(c => c.connector.peerId === peerId);
-    },
-  );
-  const sessionV1: WalletConnect | undefined = connectorV1?.connector;
-  const requestsV1 = useAppSelector(({WALLET_CONNECT}) => {
-    return WALLET_CONNECT.requests.filter(request => request.peerId === peerId);
-  });
 
   // version 2
   const sessionV2: WCV2SessionType | undefined = useAppSelector(
@@ -124,30 +104,21 @@ const WalletConnectHome = () => {
       WALLET_CONNECT_V2.sessions.find(session => session.topic === topic),
   );
   const requestsV2 = useAppSelector(({WALLET_CONNECT_V2}) =>
-    WALLET_CONNECT_V2.requests.filter(
-      request =>
-        request.topic === topic &&
-        getAddressFrom(request) === wallet.receiveAddress &&
-        WALLET_CONNECT_SUPPORTED_CHAINS[request.params.chainId].chain ===
-          wallet.chain,
-    ),
+    WALLET_CONNECT_V2.requests
+      .filter(
+        request =>
+          request.topic === topic &&
+          getAddressFrom(request).toLowerCase() ===
+            wallet.receiveAddress?.toLowerCase() &&
+          WALLET_CONNECT_SUPPORTED_CHAINS[request.params.chainId].chain ===
+            wallet.chain,
+      )
+      .reverse(),
   );
 
-  let peerName: string | undefined;
-  let peerIcon: string | undefined;
-  let peerUrl: string | undefined;
-
-  if (version === 1) {
-    peerName = sessionV1?.peerMeta?.name;
-    peerIcon = sessionV1?.peerMeta?.icons[0];
-    peerUrl = sessionV1?.peerMeta?.url;
-  } else {
-    peerName = sessionV2?.peer.metadata.name;
-    peerIcon = sessionV2?.peer.metadata.icons[0];
-    peerUrl = sessionV2?.peer.metadata.url;
-  }
-
-  const allKeys = useAppSelector(({WALLET}: RootState) => WALLET.keys);
+  const {peer} = sessionV2 || {};
+  const {name: peerName, icons, url: peerUrl} = peer?.metadata || {};
+  const peerIcon = icons && icons[0];
 
   const {chain, currencyAbbreviation, receiveAddress} = wallet;
   const showErrorMessage = useCallback(
@@ -213,7 +184,7 @@ const WalletConnectHome = () => {
     navigation.setOptions({
       headerTitle: () => WalletConnectHeader(),
       headerRight: () => {
-        return version === 2 ? (
+        return (
           <ItemNoteTouchableContainer
             style={{marginRight: 12}}
             onPress={() => {
@@ -221,94 +192,33 @@ const WalletConnectHome = () => {
             }}>
             <TrashIcon />
           </ItemNoteTouchableContainer>
-        ) : null;
+        );
       },
     });
-  }, [navigation, disconnectAccount, t, version]);
+  }, [navigation, disconnectAccount, t]);
 
   const goToConfirmView = async (request: any) => {
     try {
       let _wallet;
       dispatch(dismissBottomNotificationModal());
       await sleep(500);
-      dispatch(startOnGoingProcessModal('LOADING'));
-      if (
-        request.chain &&
-        request.chain !== wallet.chain &&
-        connectorV1?.customData.keyId
-      ) {
-        _wallet = allKeys[connectorV1?.customData.keyId].wallets.find(w => {
-          return (
-            w.chain === request?.chain &&
-            w.credentials.account === wallet.credentials.account
-          );
-        });
-        if (!_wallet) {
-          const errMsg = t('WCNoWalletMsg', {
-            chain: request.chain?.toUpperCase(),
-          });
-          throw new Error(errMsg);
-        }
-      }
-      const {
-        to: toAddress,
-        from,
-        gasPrice,
-        gasLimit,
-        value,
-        nonce,
-        data,
-      } = request.payload
-        ? request.payload.params[0]
-        : request.params.request.params[0];
+
+      const {to: toAddress} = request.params.request.params[0];
 
       const recipient = {
         address: toAddress,
       };
 
-      const amountStr = value
-        ? dispatch(
-            FormatAmount(currencyAbbreviation, chain, parseInt(value, 16)),
-          )
-        : 0;
-
-      const tx = {
-        wallet: _wallet || wallet,
-        recipient,
-        toAddress,
-        from,
-        amount: Number(amountStr),
-        gasPrice: parseInt(gasPrice, 16),
-        nonce: parseInt(nonce, 16),
-        gasLimit: parseInt(gasLimit, 16),
-        data,
-        customData: {
-          service: 'walletConnect',
-        },
-      };
-      const {txDetails, txp} = (await dispatch<any>(
-        createProposalAndBuildTxDetails(tx),
-      )) as any;
-      dispatch(dismissOnGoingProcessModal());
-      await sleep(500);
       navigation.navigate('WalletConnect', {
         screen: 'WalletConnectConfirm',
         params: {
           wallet: _wallet || wallet,
           recipient,
-          txp,
-          txDetails,
           request,
-          amount: tx.amount,
-          data,
           peerName,
-          version: peerId ? 1 : 2,
-          peerId,
         },
       });
     } catch (error: any) {
-      dispatch(dismissOnGoingProcessModal());
-      await sleep(500);
       await showErrorMessage(
         CustomErrorMessage({
           errMsg: BWCErrorMessage(error.err ? error.err : error),
@@ -330,6 +240,21 @@ const WalletConnectHome = () => {
     }
   };
 
+  const handleRequestMethod = (request: WCV2RequestType) => {
+    const {method} = request.params.request;
+    method !== 'eth_sendTransaction' && method !== 'eth_signTransaction'
+      ? navigation.navigate('WalletConnect', {
+          screen: 'WalletConnectRequestDetails',
+          params: {
+            request,
+            wallet,
+            peerName,
+            topic,
+          },
+        })
+      : goToConfirmView(request);
+  };
+
   useEffect(() => {
     if (!clipboardObj.copied) {
       return;
@@ -342,10 +267,10 @@ const WalletConnectHome = () => {
   }, [clipboardObj]);
 
   useEffect(() => {
-    if (!sessionV1 && !sessionV2) {
+    if (!sessionV2) {
       setAccountDisconnected(true);
     }
-  }, [sessionV1, sessionV2]);
+  }, [sessionV2]);
 
   useEffect(() => {
     if (accountDisconnected) {
@@ -353,11 +278,15 @@ const WalletConnectHome = () => {
     }
   }, [accountDisconnected]);
 
+  useEffect(() => {
+    if (context && ['notification'].includes(context)) {
+      handleRequestMethod(requestsV2[0]);
+    }
+  }, [context]);
+
   const renderItem = useCallback(({item, index}) => {
-    const {createdOn, peerId: undefined, chain: _chain} = item;
-    const {value = '0x0'} = item.payload
-      ? item.payload.params[0]
-      : item.params.request.params[0];
+    const {createdOn, chain: _chain} = item;
+    const {value = '0x0'} = item.params.request.params[0];
     const amountStr = dispatch(
       FormatAmountStr(
         _chain || currencyAbbreviation,
@@ -365,28 +294,13 @@ const WalletConnectHome = () => {
         parseInt(value, 16),
       ),
     );
-    const method = item.payload
-      ? item.payload.method
-      : item.params.request.method;
 
     return (
       <View key={index.toString()}>
         <ItemTouchableContainer
           onPress={() => {
             haptic('impactLight');
-            method !== 'eth_sendTransaction' && method !== 'eth_signTransaction'
-              ? navigation.navigate('WalletConnect', {
-                  screen: 'WalletConnectRequestDetails',
-                  params: {
-                    request: item.payload ? item.payload : item,
-                    wallet,
-                    peerName,
-                    version: item.payload ? 1 : 2,
-                    peerId,
-                    topic,
-                  },
-                })
-              : goToConfirmView(item);
+            handleRequestMethod(item);
           }}>
           <ItemTitleContainer style={{maxWidth: '40%'}}>
             {peerIcon && peerName ? (
@@ -495,22 +409,17 @@ const WalletConnectHome = () => {
         <PRContainer>
           <HeaderTitle>{t('Pending Requests')}</HeaderTitle>
           <Hr />
-          {(requestsV1 && requestsV1.length) ||
-          (requestsV2 && requestsV2.length) ? (
+          {requestsV2 && requestsV2.length ? (
             <FlatList
               data={
-                requestsV1 && requestsV1.length
-                  ? requestsV1
-                  : requestsV2 && requestsV2.length
-                  ? requestsV2
-                  : ([] as any[])
+                requestsV2 && requestsV2.length ? requestsV2 : ([] as any[])
               }
               keyExtractor={(_item, index) => index.toString()}
               renderItem={({
                 item,
                 index,
               }: {
-                item: WCV2RequestType | IWCRequest;
+                item: WCV2RequestType;
                 index: number;
               }) => renderItem({item, index})}
             />

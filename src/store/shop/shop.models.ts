@@ -172,6 +172,12 @@ export interface Invoice {
   expirationTime: number;
   merchantName: string;
   currency: string;
+  oauth?: {
+    coinbase?: {
+      enabled: boolean;
+      threshold: number;
+    };
+  };
 }
 
 export interface PhoneCountryInfo {
@@ -250,4 +256,56 @@ export interface LegacyGiftCard {
   pin?: string;
   status: string;
   uuid: string;
+}
+
+export interface BillPayAccount {
+  id: string;
+  status: string;
+  type: 'liability';
+  isPayable: boolean;
+  liability: {
+    merchantId: string;
+    merchantIcon: string;
+    merchantName: string;
+    mask: string;
+    name: string;
+    type: string;
+    balance: number;
+    lastStatementBalance?: number;
+    lastSuccessfulSync?: string;
+    remainingStatementBalance?: number;
+    nextPaymentDueDate?: string;
+    paddedNextPaymentDueDate?: string;
+    nextPaymentMinimumAmount: number;
+    description: string;
+  };
+}
+
+export interface BillPayment {
+  partnerAccountId: string;
+  partnerPaymentId?: string;
+  currency: string;
+  amount: number;
+  createdOn: string;
+  creditedOn: string;
+  convenienceFee: number;
+  status: 'complete' | 'processing' | 'failed';
+}
+
+export interface BillPayPayment {
+  id: string;
+  invoice: string;
+  createdOn: string;
+  payments: BillPayment[];
+}
+
+export interface BillPayInvoiceParams {
+  payments: {accountId: string; amount: number; currency: string}[];
+  transactionCurrency: string;
+}
+
+export interface BillPayOrder {
+  invoiceId: string;
+  invoice: Invoice;
+  payments: BillPayment[];
 }

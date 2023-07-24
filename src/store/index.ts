@@ -11,7 +11,6 @@ import {Selector} from 'reselect';
 import {
   bindWalletClient,
   bindWalletKeys,
-  transformCircular,
   transformContacts,
 } from './transforms/transforms';
 
@@ -91,17 +90,12 @@ import {LogActions} from './log';
 import {walletBackupReducer} from './wallet-backup/wallet-backup.reducer';
 import {WalletBackupActionType} from './wallet-backup/wallet-backup.types';
 import {
+  walletConnectReducer,
   walletConnectV2Reducer,
   walletConnectV2ReduxPersistBlackList,
   WalletConnectV2State,
 } from './wallet-connect-v2/wallet-connect-v2.reducer';
 import {WalletConnectV2ActionType} from './wallet-connect-v2/wallet-connect-v2.types';
-import {
-  walletConnectReducer,
-  walletConnectReduxPersistBlackList,
-  WalletConnectState,
-} from './wallet-connect/wallet-connect.reducer';
-import {WalletConnectActionType} from './wallet-connect/wallet-connect.types';
 
 const basePersistConfig = {
   storage: AsyncStorage,
@@ -122,7 +116,7 @@ const reducerPersistBlackLists = {
   RATE: rateReduxPersistBlackList,
   CONTACT: ContactReduxPersistBlackList,
   COINBASE: CoinbaseReduxPersistBlackList,
-  WALLET_CONNECT: walletConnectReduxPersistBlackList,
+  WALLET_CONNECT: [],
   WALLET_CONNECT_V2: walletConnectV2ReduxPersistBlackList,
 };
 
@@ -239,12 +233,14 @@ const reducers = {
     },
     coinbaseReducer,
   ),
-  WALLET_CONNECT: persistReducer<WalletConnectState, WalletConnectActionType>(
+  WALLET_CONNECT: persistReducer<
+    WalletConnectV2State,
+    WalletConnectV2ActionType
+  >(
     {
-      storage: AsyncStorage,
+      ...basePersistConfig,
       key: 'WALLET_CONNECT',
-      transforms: [transformCircular],
-      blacklist: walletConnectReduxPersistBlackList,
+      blacklist: [],
     },
     walletConnectReducer,
   ),

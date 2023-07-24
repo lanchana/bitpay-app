@@ -4,16 +4,17 @@ import {BottomNotificationConfig} from '../../components/modal/bottom-notificati
 import {PinModalConfig} from '../../components/modal/pin/PinModal';
 import {Network} from '../../constants';
 import {DecryptPasswordConfig} from '../../navigation/wallet/components/DecryptEnterPasswordModal';
-import {NavScreenParams, RootStackParamList} from '../../Root';
 import {
   AppIdentity,
   HomeCarouselConfig,
   HomeCarouselLayoutType,
+  InAppNotificationContextType,
 } from './app.models';
 import {SettingsListType} from '../../navigation/tabs/settings/SettingsRoot';
 import {AltCurrenciesRowProps} from '../../components/list/AltCurrenciesRow';
 import {FeedbackType, ModalId} from './app.reducer';
 import {BiometricModalConfig} from '../../components/modal/biometric/BiometricModal';
+import {SignClientTypes} from '@walletconnect/types';
 
 export enum AppActionTypes {
   NETWORK_CHANGED = 'APP/NETWORK_CHANGED',
@@ -28,6 +29,8 @@ export enum AppActionTypes {
   SET_ONBOARDING_COMPLETED = 'APP/SET_ONBOARDING_COMPLETED',
   SHOW_ONGOING_PROCESS_MODAL = 'APP/SHOW_ONGOING_PROCESS_MODAL',
   DISMISS_ONGOING_PROCESS_MODAL = 'APP/DISMISS_ONGOING_PROCESS_MODAL',
+  SHOW_IN_APP_NOTIFICATION = 'APP/SHOW_IN_APP_NOTIFICATION',
+  DISMISS_IN_APP_NOTIFICATION = 'APP/DISMISS_IN_APP_NOTIFICATION',
   SHOW_BOTTOM_NOTIFICATION_MODAL = 'APP/SHOW_BOTTOM_NOTIFICATION_MODAL',
   DISMISS_BOTTOM_NOTIFICATION_MODAL = 'APP/DISMISS_BOTTOM_NOTIFICATION_MODAL',
   RESET_BOTTOM_NOTIFICATION_MODAL_CONFIG = 'APP/RESET_BOTTOM_NOTIFICATION_MODAL_CONFIG',
@@ -52,6 +55,7 @@ export enum AppActionTypes {
   PIN_BANNED_UNTIL = 'APP/PIN_BANNED_UNTIL',
   SHOW_BLUR = 'APP/SHOW_BLUR',
   SHOW_PORTFOLIO_VALUE = 'APP/SHOW_PORTFOLIO_VALUE',
+  TOGGLE_HIDE_ALL_BALANCES = 'APP/TOGGLE_HIDE_ALL_BALANCES',
   BRAZE_INITIALIZED = 'APP/BRAZE_INITIALIZED',
   BRAZE_CONTENT_CARDS_FETCHED = 'APP/BRAZE_CONTENT_CARDS_FETCHED',
   SET_BRAZE_EID = 'APP/SET_BRAZE_EID',
@@ -72,7 +76,6 @@ export enum AppActionTypes {
   CHECKING_BIOMETRIC_FOR_SENDING = 'APP/CHECKING_BIOMETRIC_FOR_SENDING',
   SET_HAS_VIEWED_ZENLEDGER_WARNING = 'APP/SET_HAS_VIEWED_ZENLEDGER_WARNING',
   USER_FEEDBACK = 'APP/USER_FEEDBACK',
-  EXPECTED_KEY_LENGTH_CHANGE = 'APP/EXPECTED_KEY_LENGTH_CHANGE',
 }
 
 interface NetworkChanged {
@@ -123,6 +126,19 @@ interface DismissOnGoingProcessModal {
   type: typeof AppActionTypes.DISMISS_ONGOING_PROCESS_MODAL;
 }
 
+interface ShowInAppNotification {
+  type: typeof AppActionTypes.SHOW_IN_APP_NOTIFICATION;
+  payload: {
+    message: string;
+    request: SignClientTypes.EventArguments['session_request'];
+    context: InAppNotificationContextType;
+  };
+}
+
+interface DismissInAppNotification {
+  type: typeof AppActionTypes.DISMISS_IN_APP_NOTIFICATION;
+}
+
 interface ShowBottomNotificationModal {
   type: typeof AppActionTypes.SHOW_BOTTOM_NOTIFICATION_MODAL;
   payload: BottomNotificationConfig;
@@ -139,11 +155,6 @@ interface ResetBottomNotificationModalConfig {
 interface SetColorScheme {
   type: typeof AppActionTypes.SET_COLOR_SCHEME;
   payload: ColorSchemeName;
-}
-
-interface SetCurrentRoute {
-  type: typeof AppActionTypes.SET_CURRENT_ROUTE;
-  payload: [keyof RootStackParamList, NavScreenParams];
 }
 
 interface SuccessGenerateAppIdentity {
@@ -255,6 +266,11 @@ interface ShowPortfolioValue {
   payload: boolean;
 }
 
+interface ToggleHideAllBalances {
+  type: typeof AppActionTypes.TOGGLE_HIDE_ALL_BALANCES;
+  payload?: boolean;
+}
+
 interface BrazeInitialized {
   type: typeof AppActionTypes.BRAZE_INITIALIZED;
   payload: {contentCardSubscription: EventSubscription | null};
@@ -331,11 +347,6 @@ interface setUserFeedback {
   payload: FeedbackType;
 }
 
-interface setExpectedKeyLengthChange {
-  type: typeof AppActionTypes.EXPECTED_KEY_LENGTH_CHANGE;
-  payload: number;
-}
-
 export type AppActionType =
   | NetworkChanged
   | SuccessAppInit
@@ -349,11 +360,12 @@ export type AppActionType =
   | SetOnboardingCompleted
   | ShowOnGoingProcessModal
   | DismissOnGoingProcessModal
+  | ShowInAppNotification
+  | DismissInAppNotification
   | ShowBottomNotificationModal
   | DismissBottomNotificationModal
   | ResetBottomNotificationModalConfig
   | SetColorScheme
-  | SetCurrentRoute
   | SuccessGenerateAppIdentity
   | FailedGenerateAppIdentity
   | SetNotificationsAccepted
@@ -373,6 +385,7 @@ export type AppActionType =
   | PinBannedUntil
   | ShowBlur
   | ShowPortfolioValue
+  | ToggleHideAllBalances
   | BrazeInitialized
   | BrazeContentCardsFetched
   | SetBrazeEid
@@ -392,5 +405,4 @@ export type AppActionType =
   | ActiveModalUpdated
   | checkingBiometricForSending
   | SetHasViewedZenLedgerWarning
-  | setExpectedKeyLengthChange
   | SetHasViewedZenLedgerWarning;

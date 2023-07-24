@@ -173,11 +173,10 @@ export const formatFiatAmount = (
   opts: {
     customPrecision?: 'minimal';
     currencyAbbreviation?: string;
-    currencyDisplay?: 'symbol';
+    currencyDisplay?: 'symbol' | 'code';
   } = {},
 ) => {
-  const currencyDisplay =
-    currency === 'USD' ? 'symbol' : opts.currencyDisplay || 'code';
+  const currencyDisplay = opts.currencyDisplay || 'symbol';
   const formatter = getFormatter(amount, currency, {...opts, currencyDisplay});
 
   if (currencyDisplay === 'symbol') {
@@ -218,6 +217,24 @@ export const findContact = (
   return !!foundContacts.length;
 };
 
+export const getContactObj = (
+  contactList: ContactRowProps[],
+  address: string,
+  coin: string,
+  network: string,
+  chain: string,
+) => {
+  const contactObj = contactList.find((contact: ContactRowProps) => {
+    return (
+      contact.address === address &&
+      contact.coin === coin &&
+      contact.network === network &&
+      contact.chain === chain
+    );
+  });
+  return contactObj;
+};
+
 export const getMnemonic = (key: Key) =>
   key.properties!.mnemonic.trim().split(' ');
 
@@ -256,11 +273,10 @@ export const formatFiatAmountObj = (
   opts: {
     customPrecision?: 'minimal';
     currencyAbbreviation?: string;
-    currencyDisplay?: 'symbol';
+    currencyDisplay?: 'symbol' | 'code';
   } = {},
 ): {amount: string; code?: string} => {
-  const currencyDisplay =
-    currency === 'USD' ? 'symbol' : opts.currencyDisplay || 'code';
+  const currencyDisplay = opts.currencyDisplay || 'symbol';
   const formatter = getFormatter(amount, currency, {...opts, currencyDisplay});
 
   if (currencyDisplay === 'symbol') {

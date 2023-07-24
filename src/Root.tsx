@@ -7,7 +7,7 @@ import {
 import {createStackNavigator} from '@react-navigation/stack';
 import debounce from 'lodash.debounce';
 import Braze from 'react-native-appboy-sdk';
-import React, {useEffect, useMemo, useRef, useState} from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {
   Appearance,
   AppState,
@@ -94,8 +94,7 @@ import PinModal from './components/modal/pin/PinModal';
 import CoinbaseStack, {
   CoinbaseStackParamList,
 } from './navigation/coinbase/CoinbaseStack';
-import BpDevtools from './components/bp-devtools/BpDevtools';
-import {APP_ANALYTICS_ENABLED, DEVTOOLS_ENABLED} from './constants/config';
+import {APP_ANALYTICS_ENABLED} from './constants/config';
 import {BlurContainer} from './components/blur/Blur';
 import DebugScreen, {DebugScreenParamList} from './navigation/Debug';
 import CardActivationStack, {
@@ -119,6 +118,11 @@ import {Keys} from './store/wallet/wallet.reducer';
 import NetworkFeePolicySettingsStack, {
   NetworkFeePolicySettingsStackParamsList,
 } from './navigation/tabs/settings/NetworkFeePolicy/NetworkFeePolicyStack';
+import {WalletActions} from './store/wallet';
+import BillStack, {
+  BillStackParamList,
+} from './navigation/tabs/shop/bill/BillStack';
+import InAppNotification from './components/modal/in-app-notification/InAppNotification';
 
 // ROOT NAVIGATION CONFIG
 export type RootStackParamList = {
@@ -134,6 +138,7 @@ export type RootStackParamList = {
   GiftCard: NavigatorScreenParams<GiftCardStackParamList>;
   GiftCardDeeplink: GiftCardDeeplinkScreenParamList;
   Merchant: NavigatorScreenParams<MerchantStackParamList>;
+  Bill: NavigatorScreenParams<BillStackParamList>;
   GeneralSettings: NavigatorScreenParams<GeneralSettingsStackParamList>;
   Contacts: NavigatorScreenParams<ContactsStackParamList>;
   ExternalServicesSettings: NavigatorScreenParams<ExternalServicesSettingsStackParamList>;
@@ -162,6 +167,7 @@ export enum RootStacks {
   GIFT_CARD = 'GiftCard',
   GIFT_CARD_DEEPLINK = 'GiftCardDeeplink',
   MERCHANT = 'Merchant',
+  BILL = 'Bill',
   // SETTINGS
   GENERAL_SETTINGS = 'GeneralSettings',
   EXTERNAL_SERVICES_SETTINGS = 'ExternalServicesSettings',
@@ -185,6 +191,7 @@ export type NavScreenParams = NavigatorScreenParams<
     CardActivationStackParamList &
     GiftCardStackParamList &
     MerchantStackParamList &
+    BillStackParamList &
     GeneralSettingsStackParamList &
     ContactsStackParamList &
     ExternalServicesSettingsStackParamList &
@@ -244,7 +251,6 @@ export default () => {
     ({APP}) => APP.checkingBiometricForSending,
   );
   const appColorScheme = useAppSelector(({APP}) => APP.colorScheme);
-  const cachedRoute = useAppSelector(({APP}) => APP.currentRoute);
   const appLanguage = useAppSelector(({APP}) => APP.defaultLanguage);
   const pinLockActive = useAppSelector(({APP}) => APP.pinLockActive);
   const failedAppInit = useAppSelector(({APP}) => APP.failedAppInit);
@@ -254,14 +260,13 @@ export default () => {
   const lockAuthorizedUntil = useAppSelector(
     ({APP}) => APP.lockAuthorizedUntil,
   );
-
   const keys = useAppSelector(({WALLET}) => WALLET.keys);
-  const backupKeys = useAppSelector(({WALLET_BACKUP}) => WALLET_BACKUP.keys);
   const expectedKeyLengthChange = useAppSelector(
-    ({APP}) => APP.expectedKeyLengthChange,
+    ({WALLET}) => WALLET.expectedKeyLengthChange,
   );
+  const backupKeys = useAppSelector(({WALLET_BACKUP}) => WALLET_BACKUP.keys);
   const [previousKeysLength, setPreviousKeysLength] = useState(
-    Object.keys(backupKeys).length,
+    () => Object.keys(backupKeys).length,
   );
 
   const bootstrapKeyAndWallets = ({
@@ -299,6 +304,7 @@ export default () => {
         dispatch(
           successCreateKey({
             key: backupKeys[missingKey],
+            lengthChange: 0,
           }),
         );
       } catch (err) {
@@ -336,15 +342,6 @@ export default () => {
             const childRoute =
               parentRoute.state.routes[parentRoute.state.index || 0];
 
-            dispatch(
-              AppActions.setCurrentRoute([
-                parentRoute.name,
-                {
-                  screen: childRoute.name,
-                  params: childRoute.params,
-                },
-              ]),
-            );
             dispatch(
               LogActions.info(`Navigation event... ${parentRoute.name}`),
             );
@@ -393,15 +390,44 @@ export default () => {
 
   // BACKUP KEY LOGIC
   useEffect(() => {
+    let checkObjDiff = (obj1: Keys, obj2: Keys) => {
+      if (Object.keys(obj1).length !== Object.keys(obj2).length) {
+        return true;
+      }
+      const keys = new Set([...Object.keys(obj1), ...Object.keys(obj2)]);
+      for (const key of keys) {
+        const mnemonicEncryptedChanged =
+          obj1[key]?.properties?.mnemonicEncrypted !==
+          obj2[key]?.properties?.mnemonicEncrypted;
+        const backupCompleteChanged =
+          obj1[key]?.backupComplete !== obj2[key]?.backupComplete;
+        const keyNameChanged = obj1[key]?.keyName !== obj2[key]?.keyName;
+        const walletLengthChanged =
+          obj1[key]?.wallets?.length !== obj2[key]?.wallets?.length;
+        if (
+          mnemonicEncryptedChanged ||
+          backupCompleteChanged ||
+          keyNameChanged ||
+          walletLengthChanged
+        ) {
+          return true;
+        }
+      }
+      return false;
+    };
+
     const numNewKeys = Object.keys(keys).length;
     const keyLengthChange = previousKeysLength - numNewKeys;
     setPreviousKeysLength(numNewKeys);
-    dispatch(AppActions.setExpectedKeyLengthChange(0));
+    dispatch(WalletActions.setExpectedKeyLengthChange(0));
 
     // keys length changed as expected
     if (expectedKeyLengthChange === keyLengthChange) {
       try {
-        debounceBoostrapAndSave(keys);
+        // check if any key was added or removed or if there is any diff worth to save
+        if (checkObjDiff(keys, backupKeys)) {
+          debounceBoostrapAndSave(keys);
+        }
         return;
       } catch (err) {
         const errStr = err instanceof Error ? err.message : JSON.stringify(err);
@@ -492,8 +518,8 @@ export default () => {
   // Silent Push Notifications
   useEffect(() => {
     function onMessageReceived(response: SilentPushEvent) {
-      console.log(
-        '##### Received Silent Push Notification',
+      LogActions.debug(
+        '[Root] Silent Push Notification',
         JSON.stringify(response),
       );
       dispatch(handleBwsEvent(response));
@@ -531,8 +557,6 @@ export default () => {
     ? RootStacks.ONBOARDING
     : RootStacks.INTRO;
 
-  const showDevtools = __DEV__ && DEVTOOLS_ENABLED;
-
   return (
     <SafeAreaProvider>
       <StatusBar
@@ -543,8 +567,6 @@ export default () => {
       />
 
       <ThemeProvider theme={theme}>
-        {showDevtools ? <BpDevtools /> : null}
-
         <NavigationContainer
           ref={navigationRef}
           theme={theme}
@@ -552,18 +574,7 @@ export default () => {
           onReady={async () => {
             DeviceEventEmitter.emit(DeviceEmitterEvents.APP_NAVIGATION_READY);
 
-            // routing to previous route if onboarding
-            if (cachedRoute && !onboardingCompleted) {
-              const [cachedStack, cachedParams] = cachedRoute;
-              navigationRef.navigate(cachedStack, cachedParams);
-              dispatch(
-                LogActions.info(
-                  `Navigating to cached route... ${cachedStack} ${JSON.stringify(
-                    cachedParams,
-                  )}`,
-                ),
-              );
-            } else {
+            if (onboardingCompleted) {
               const getBrazeInitialUrl = async (): Promise<string> =>
                 new Promise(resolve =>
                   Braze.getInitialURL(deepLink => resolve(deepLink)),
@@ -649,6 +660,7 @@ export default () => {
               component={GiftCardDeeplinkScreen}
             />
             <Root.Screen name={RootStacks.MERCHANT} component={MerchantStack} />
+            <Root.Screen name={RootStacks.BILL} component={BillStack} />
             {/* SETTINGS */}
             <Root.Screen
               name={RootStacks.GENERAL_SETTINGS}
@@ -690,6 +702,7 @@ export default () => {
             />
           </Root.Navigator>
           <OnGoingProcessModal />
+          <InAppNotification />
           <BottomNotificationModal />
           <DecryptEnterPasswordModal />
           <BlurContainer />

@@ -1,4 +1,3 @@
-import {JsonMap} from '@segment/analytics-react-native';
 import BitAuth from 'bitauth';
 import i18n, {t} from 'i18next';
 import {debounce} from 'lodash';
@@ -21,7 +20,6 @@ import {
   RESULTS,
 } from 'react-native-permissions';
 import uuid from 'react-native-uuid';
-import {batch} from 'react-redux';
 import {AppActions} from '.';
 import BitPayApi from '../../api/bitpay';
 import GraphQlApi from '../../api/graphql';
@@ -57,7 +55,7 @@ import {
   setUserFeedback,
   showBlur,
 } from './app.actions';
-import {AppIdentity} from './app.models';
+import {AppIdentity, InAppNotificationContextType} from './app.models';
 import {
   findKeyByKeyId,
   findWalletByIdHashed,
@@ -94,8 +92,10 @@ import {goToSwapCrypto} from '../swap-crypto/swap-crypto.effects';
 import {receiveCrypto, sendCrypto} from '../wallet/effects/send/send';
 import moment from 'moment';
 import {FeedbackRateType} from '../../navigation/tabs/settings/about/screens/SendFeedback';
+import {moralisInit} from '../moralis/moralis.effects';
 import {walletConnectV2Init} from '../wallet-connect-v2/wallet-connect-v2.effects';
-import {walletConnectInit} from '../wallet-connect/wallet-connect.effects';
+import {InAppNotificationMessages} from '../../components/modal/in-app-notification/InAppNotification';
+import {SignClientTypes} from '@walletconnect/types';
 
 // Subscription groups (Braze)
 const PRODUCTS_UPDATES_GROUP_ID = __DEV__
@@ -215,9 +215,9 @@ export const startAppInit = (): Effect => async (dispatch, getState) => {
     }
 
     // splitting inits into store specific ones as to keep it cleaner in the main init here
-    dispatch(walletConnectInit());
     dispatch(walletConnectV2Init());
     dispatch(initializeBrazeContent());
+    dispatch(moralisInit());
 
     // Update Coinbase
     dispatch(coinbaseInitialize());
@@ -499,6 +499,7 @@ export const startOnGoingProcessModal =
       CREATING_TXP: i18n.t('Creating Transaction'),
       SENDING_EMAIL: i18n.t('Sending Email'),
       REDIRECTING: i18n.t('Redirecting'),
+      BROADCASTING_TXP: i18n.t('Broadcasting transaction...'),
     };
 
     // if modal currently active dismiss and sleep to allow animation to complete before showing next
@@ -512,6 +513,31 @@ export const startOnGoingProcessModal =
 
     dispatch(AppActions.showOnGoingProcessModal(_message));
     return sleep(100);
+  };
+
+export const startInAppNotification =
+  (
+    key: InAppNotificationMessages,
+    request: SignClientTypes.EventArguments['session_request'],
+    context: InAppNotificationContextType,
+  ): Effect<Promise<void>> =>
+  async (dispatch, getState: () => RootState) => {
+    const store: RootState = getState();
+
+    const _InAppNotificationMessages = {
+      NEW_PENDING_REQUEST: i18n.t('New Pending Request'),
+    };
+
+    // if modal currently active dismiss and sleep to allow animation to complete before showing next
+    if (store.APP.showInAppNotification) {
+      dispatch(AppActions.dismissInAppNotification());
+      await sleep(500);
+    }
+
+    // Translate message before show message
+    const _message = _InAppNotificationMessages[key];
+
+    dispatch(AppActions.showInAppNotification(context, _message, request));
   };
 
 /**
@@ -882,19 +908,17 @@ export const handleBwsEvent =
   };
 
 export const resetAllSettings = (): Effect => dispatch => {
-  batch(() => {
-    dispatch(AppActions.setColorScheme(null));
-    dispatch(AppActions.showPortfolioValue(true));
-    dispatch(
-      AppActions.setDefaultAltCurrency({isoCode: 'USD', name: 'US Dollar'}),
-    );
-    dispatch(AppActions.setDefaultLanguage(i18n.language || 'en'));
-    dispatch(WalletActions.setUseUnconfirmedFunds(false));
-    dispatch(WalletActions.setCustomizeNonce(false));
-    dispatch(WalletActions.setQueuedTransactions(false));
-    dispatch(WalletActions.setEnableReplaceByFee(false));
-    dispatch(LogActions.info('Reset all settings'));
-  });
+  dispatch(AppActions.setColorScheme(null));
+  dispatch(AppActions.showPortfolioValue(true));
+  dispatch(
+    AppActions.setDefaultAltCurrency({isoCode: 'USD', name: 'US Dollar'}),
+  );
+  dispatch(AppActions.setDefaultLanguage(i18n.language || 'en'));
+  dispatch(WalletActions.setUseUnconfirmedFunds(false));
+  dispatch(WalletActions.setCustomizeNonce(false));
+  dispatch(WalletActions.setQueuedTransactions(false));
+  dispatch(WalletActions.setEnableReplaceByFee(false));
+  dispatch(LogActions.info('Reset all settings'));
 };
 
 export const getRouteParam = (url: string, param: string) => {
@@ -928,7 +952,7 @@ export const incomingShopLink =
     const merchantName = getRouteParam(url, 'merchant');
     const categoryName = getRouteParam(url, 'category');
 
-    if (!['giftcard', 'shoponline'].includes(route.name)) {
+    if (!['giftcard', 'shoponline', 'billpay'].includes(route.name)) {
       return undefined;
     }
 
@@ -983,6 +1007,13 @@ export const incomingShopLink =
           },
         });
       }
+    } else if (route.name === 'billpay') {
+      navigationRef.navigate('Shop', {
+        screen: ShopScreens.HOME,
+        params: {
+          screen: ShopTabs.BILLS,
+        },
+      });
     }
     return {merchantName};
   };

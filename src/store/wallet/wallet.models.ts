@@ -201,6 +201,7 @@ export interface CustomTransactionData {
   oneInch?: string;
   shapeShift?: string;
   toWalletName?: any;
+  billPayMerchantIds?: string[];
 }
 
 export type TransactionOptionsContext =
@@ -209,7 +210,8 @@ export type TransactionOptionsContext =
   | 'selectInputs'
   | 'fromReplaceByFee'
   | 'speedupBtcReceive'
-  | 'speedupEth';
+  | 'speedupEth'
+  | 'walletConnect';
 
 export interface TransactionOptions {
   wallet: Wallet;
@@ -322,6 +324,8 @@ export interface TransactionProposal {
   hasMultiplesOutputs: boolean;
   requiredSignatures: number;
   requiredRejections: number;
+  raw?: string;
+  txid?: string;
 }
 
 export interface ProposalErrorHandlerProps {
@@ -341,7 +345,8 @@ export interface TxDetailsFee {
   feeLevel: string;
   cryptoAmount: string;
   fiatAmount: string;
-  percentageOfTotalAmount: string;
+  percentageOfTotalAmountStr: string;
+  percentageOfTotalAmount: number;
 }
 
 export interface FeeOptions {

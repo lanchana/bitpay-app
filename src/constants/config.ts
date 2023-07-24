@@ -2,9 +2,9 @@
 import {version} from '../../package.json'; // TODO: better way to get version
 import {Network} from '.';
 
-export const DEVTOOLS_ENABLED = false;
 export const STATIC_CONTENT_CARDS_ENABLED = true;
 export const APP_ANALYTICS_ENABLED = !__DEV__;
+export const METHOD_ENV = __DEV__ ? 'dev' : 'sandbox'; // TODO: change 'sandbox' to 'production' after internal testing
 
 // GENERAL
 export const APP_NAME = 'bitpay';

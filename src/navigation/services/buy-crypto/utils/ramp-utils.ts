@@ -3,7 +3,6 @@ import {
   RampQuoteRequestData,
   RampQuoteResultForPaymentMethod,
 } from '../../../../store/buy-crypto/buy-crypto.models';
-import {Wallet} from '../../../../store/wallet/wallet.models';
 import {getCurrencyAbbreviation} from '../../../../utils/helper-methods';
 
 export const rampEnv = __DEV__ ? 'sandbox' : 'production';
@@ -14,7 +13,53 @@ export const getRampCheckoutUri = (): string => {
     : 'https://buy.ramp.network';
 };
 
-export const rampSupportedFiatCurrencies = ['EUR', 'GBP', 'USD'];
+export const rampSupportedFiatCurrencies = [
+  'BMD',
+  'BAM',
+  'BWP',
+  'BRL',
+  'BGN',
+  'CHF',
+  'COP',
+  'CRC',
+  'CZK',
+  'DKK',
+  'DOP',
+  'EUR',
+  'GBP',
+  'GEL',
+  'GTQ',
+  'HNL',
+  'HUF',
+  'ISK',
+  'INR',
+  'ILS',
+  'KZT',
+  'KES',
+  'KWD',
+  'LAK',
+  'LKR',
+  'MKD',
+  'MYR',
+  'MXN',
+  'MDL',
+  'MZN',
+  'NZD',
+  'NGN',
+  'PYG',
+  'PEN',
+  'PLN',
+  'RON',
+  'RSD',
+  'SEK',
+  'SGD',
+  'THB',
+  'TJS',
+  'USD',
+  'UYU',
+  'ZAR',
+];
+
 export const rampSupportedCoins = [
   'btc',
   'bch',
@@ -64,7 +109,7 @@ export const getRampSupportedCurrencies = (): string[] => {
 };
 
 export const getRampCoinFormat = (coin: string, chain: string): string => {
-  let formattedCoin: string = `${coin.toUpperCase()}_${chain.toUpperCase()}`;
+  let formattedCoin: string = `${chain.toUpperCase()}_${coin.toUpperCase()}`;
   return formattedCoin;
 };
 

@@ -5,10 +5,15 @@ export const basicInfoFields = `
   givenName
   familyName
   email
+  verified
   eid
   incentiveLevel
   incentiveLevelId
+  methodEntityId
+  phone
   name
+  country
+  state
   userSettings {
     agreedCardholderAgreement
     acknowledgePrivacyNotice

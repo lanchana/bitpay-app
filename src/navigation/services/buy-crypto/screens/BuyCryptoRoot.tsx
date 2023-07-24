@@ -34,10 +34,6 @@ import {Wallet} from '../../../../store/wallet/wallet.models';
 import {Action, White, Slate, SlateDark} from '../../../../styles/colors';
 import SelectorArrowDown from '../../../../../assets/img/selector-arrow-down.svg';
 import SelectorArrowRight from '../../../../../assets/img/selector-arrow-right.svg';
-import {getMoonpaySupportedCurrencies} from '../utils/moonpay-utils';
-import {getRampSupportedCurrencies} from '../utils/ramp-utils';
-import {getSimplexSupportedCurrencies} from '../utils/simplex-utils';
-import {getWyreSupportedCurrencies} from '../utils/wyre-utils';
 import {
   getBadgeImg,
   getCurrencyAbbreviation,
@@ -46,7 +42,10 @@ import {
 import {AppActions} from '../../../../store/app';
 import {IsERCToken} from '../../../../store/wallet/utils/currency';
 import {
+  BuyCryptoExchangeKey,
+  BuyCryptoSupportedExchanges,
   getAvailableFiatCurrencies,
+  getBuyCryptoSupportedCoins,
   isPaymentMethodSupported,
 } from '../utils/buy-crypto-utils';
 import {useTranslation} from 'react-i18next';
@@ -82,8 +81,9 @@ export type BuyCryptoRootScreenParams =
       amount: number;
       fromWallet?: any;
       buyCryptoOpts?: any;
-      currencyAbbreviation?: string; // used from charts.
-      chain?: string; // used from charts.
+      currencyAbbreviation?: string | undefined; // used from charts and deeplinks.
+      chain?: string | undefined; // used from charts and deeplinks.
+      partner?: BuyCryptoExchangeKey | undefined; // used from deeplinks.
     }
   | undefined;
 
@@ -107,6 +107,8 @@ const BuyCryptoRoot: React.VFC<
   const allKeys = useAppSelector(({WALLET}: RootState) => WALLET.keys);
   const tokenData = useAppSelector(({WALLET}: RootState) => WALLET.tokenData);
   const locationData = useAppSelector(({LOCATION}) => LOCATION.locationData);
+  const network = useAppSelector(({APP}) => APP.network);
+  const user = useAppSelector(({BITPAY_ID}) => BITPAY_ID.user[network]);
   const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
 
   const fromWallet = route.params?.fromWallet;
@@ -114,7 +116,9 @@ const BuyCryptoRoot: React.VFC<
   const fromCurrencyAbbreviation =
     route.params?.currencyAbbreviation?.toLowerCase();
   const fromChain = route.params?.chain?.toLowerCase();
-
+  const preSetPartner = route.params?.partner?.toLowerCase() as
+    | BuyCryptoExchangeKey
+    | undefined;
   const [amount, setAmount] = useState<number>(fromAmount);
   const [selectedWallet, setSelectedWallet] = useState<Wallet>();
   const [amountModalVisible, setAmountModalVisible] = useState(false);
@@ -127,14 +131,9 @@ const BuyCryptoRoot: React.VFC<
       ? PaymentMethodsAvailable.applePay
       : PaymentMethodsAvailable.debitCard,
   );
-  const [buyCryptoSupportedCoins, setbuyCryptoSupportedCoins] = useState([
-    ...new Set([
-      ...getMoonpaySupportedCurrencies(locationData?.countryShortCode || 'US'),
-      ...getRampSupportedCurrencies(),
-      ...getSimplexSupportedCurrencies(),
-      ...getWyreSupportedCurrencies(),
-    ]),
-  ]);
+  const [buyCryptoSupportedCoins, setbuyCryptoSupportedCoins] = useState(
+    getBuyCryptoSupportedCoins(locationData, preSetPartner),
+  );
   const [buyCryptoSupportedCoinsFullObj, setBuyCryptoSupportedCoinsFullObj] =
     useState<ToWalletSelectorCustomCurrency[]>([]);
   const fiatCurrency = getAvailableFiatCurrencies().includes(
@@ -259,21 +258,13 @@ const BuyCryptoRoot: React.VFC<
   const walletIsSupported = (wallet: Wallet): boolean => {
     return (
       wallet.credentials &&
-      ((wallet.network === 'livenet' &&
-        buyCryptoSupportedCoins.includes(
-          getCurrencyAbbreviation(
-            wallet.currencyAbbreviation.toLowerCase(),
-            wallet.chain,
-          ),
-        )) ||
-        (__DEV__ &&
-          wallet.network === 'testnet' &&
-          getWyreSupportedCurrencies().includes(
-            getCurrencyAbbreviation(
-              wallet.currencyAbbreviation.toLowerCase(),
-              wallet.chain,
-            ),
-          ))) &&
+      wallet.network === 'livenet' &&
+      buyCryptoSupportedCoins.includes(
+        getCurrencyAbbreviation(
+          wallet.currencyAbbreviation.toLowerCase(),
+          wallet.chain,
+        ),
+      ) &&
       wallet.isComplete() &&
       !wallet.hideWallet &&
       (!fromCurrencyAbbreviation ||
@@ -285,21 +276,13 @@ const BuyCryptoRoot: React.VFC<
   const setWallet = (wallet: Wallet) => {
     if (
       wallet.credentials &&
-      ((wallet.network === 'livenet' &&
-        buyCryptoSupportedCoins.includes(
-          getCurrencyAbbreviation(
-            wallet.currencyAbbreviation.toLowerCase(),
-            wallet.chain,
-          ),
-        )) ||
-        (__DEV__ &&
-          wallet.network === 'testnet' &&
-          getWyreSupportedCurrencies().includes(
-            getCurrencyAbbreviation(
-              wallet.currencyAbbreviation.toLowerCase(),
-              wallet.chain,
-            ),
-          )))
+      wallet.network === 'livenet' &&
+      buyCryptoSupportedCoins.includes(
+        getCurrencyAbbreviation(
+          wallet.currencyAbbreviation.toLowerCase(),
+          wallet.chain,
+        ),
+      )
     ) {
       if (wallet.isComplete()) {
         if (allKeys[wallet.keyId].backupComplete) {
@@ -394,47 +377,67 @@ const BuyCryptoRoot: React.VFC<
       coin: selectedWallet?.currencyAbbreviation || '',
       chain: selectedWallet?.chain || '',
       country: locationData?.countryShortCode || 'US',
-      selectedWallet,
+      selectedWallet: selectedWallet!,
       paymentMethod: selectedPaymentMethod,
       buyCryptoConfig,
+      preSetPartner,
     });
   };
 
   const setDefaultPaymentMethod = () => {
     if (!!selectedWallet && Platform.OS === 'ios') {
-      setSelectedPaymentMethod(
-        isPaymentMethodSupported(
-          'moonpay',
-          PaymentMethodsAvailable.applePay,
-          selectedWallet.currencyAbbreviation,
-          selectedWallet.chain,
-          fiatCurrency,
-          locationData?.countryShortCode || 'US',
-        ) ||
+      if (
+        preSetPartner &&
+        BuyCryptoSupportedExchanges.includes(preSetPartner)
+      ) {
+        setSelectedPaymentMethod(
           isPaymentMethodSupported(
-            'ramp',
+            preSetPartner,
             PaymentMethodsAvailable.applePay,
             selectedWallet.currencyAbbreviation,
             selectedWallet.chain,
             fiatCurrency,
-          ) ||
-          isPaymentMethodSupported(
-            'simplex',
-            PaymentMethodsAvailable.applePay,
-            selectedWallet.currencyAbbreviation,
-            selectedWallet.chain,
-            fiatCurrency,
-          ) ||
-          isPaymentMethodSupported(
-            'wyre',
-            PaymentMethodsAvailable.applePay,
-            selectedWallet.currencyAbbreviation,
-            selectedWallet.chain,
-            fiatCurrency,
+            locationData?.countryShortCode || 'US',
           )
-          ? PaymentMethodsAvailable.applePay
-          : PaymentMethodsAvailable.debitCard,
-      );
+            ? PaymentMethodsAvailable.applePay
+            : PaymentMethodsAvailable.debitCard,
+        );
+      } else {
+        setSelectedPaymentMethod(
+          isPaymentMethodSupported(
+            'moonpay',
+            PaymentMethodsAvailable.applePay,
+            selectedWallet.currencyAbbreviation,
+            selectedWallet.chain,
+            fiatCurrency,
+            locationData?.countryShortCode || 'US',
+          ) ||
+            isPaymentMethodSupported(
+              'ramp',
+              PaymentMethodsAvailable.applePay,
+              selectedWallet.currencyAbbreviation,
+              selectedWallet.chain,
+              fiatCurrency,
+            ) ||
+            isPaymentMethodSupported(
+              'sardine',
+              PaymentMethodsAvailable.applePay,
+              selectedWallet.currencyAbbreviation,
+              selectedWallet.chain,
+              fiatCurrency,
+              locationData?.countryShortCode || 'US',
+            ) ||
+            isPaymentMethodSupported(
+              'simplex',
+              PaymentMethodsAvailable.applePay,
+              selectedWallet.currencyAbbreviation,
+              selectedWallet.chain,
+              fiatCurrency,
+            )
+            ? PaymentMethodsAvailable.applePay
+            : PaymentMethodsAvailable.debitCard,
+        );
+      }
     } else {
       setSelectedPaymentMethod(PaymentMethodsAvailable.debitCard);
     }
@@ -452,35 +455,47 @@ const BuyCryptoRoot: React.VFC<
       return;
     }
     if (
-      isPaymentMethodSupported(
-        'moonpay',
-        selectedPaymentMethod,
-        selectedWallet.currencyAbbreviation,
-        selectedWallet.chain,
-        fiatCurrency,
-        locationData?.countryShortCode || 'US',
-      ) ||
-      isPaymentMethodSupported(
-        'ramp',
-        selectedPaymentMethod,
-        selectedWallet.currencyAbbreviation,
-        selectedWallet.chain,
-        fiatCurrency,
-      ) ||
-      isPaymentMethodSupported(
-        'simplex',
-        selectedPaymentMethod,
-        selectedWallet.currencyAbbreviation,
-        selectedWallet.chain,
-        fiatCurrency,
-      ) ||
-      isPaymentMethodSupported(
-        'wyre',
-        selectedPaymentMethod,
-        selectedWallet.currencyAbbreviation,
-        selectedWallet.chain,
-        fiatCurrency,
-      )
+      (preSetPartner &&
+        BuyCryptoSupportedExchanges.includes(preSetPartner) &&
+        isPaymentMethodSupported(
+          preSetPartner,
+          selectedPaymentMethod,
+          selectedWallet.currencyAbbreviation,
+          selectedWallet.chain,
+          fiatCurrency,
+          locationData?.countryShortCode || 'US',
+        )) ||
+      (!preSetPartner &&
+        (isPaymentMethodSupported(
+          'moonpay',
+          selectedPaymentMethod,
+          selectedWallet.currencyAbbreviation,
+          selectedWallet.chain,
+          fiatCurrency,
+          locationData?.countryShortCode || 'US',
+        ) ||
+          isPaymentMethodSupported(
+            'ramp',
+            selectedPaymentMethod,
+            selectedWallet.currencyAbbreviation,
+            selectedWallet.chain,
+            fiatCurrency,
+          ) ||
+          isPaymentMethodSupported(
+            'sardine',
+            selectedPaymentMethod,
+            selectedWallet.currencyAbbreviation,
+            selectedWallet.chain,
+            fiatCurrency,
+            locationData?.countryShortCode || 'US',
+          ) ||
+          isPaymentMethodSupported(
+            'simplex',
+            selectedPaymentMethod,
+            selectedWallet.currencyAbbreviation,
+            selectedWallet.chain,
+            fiatCurrency,
+          )))
     ) {
       logger.debug(
         `Selected payment method available for ${selectedWallet.currencyAbbreviation} and ${fiatCurrency}`,
@@ -522,9 +537,11 @@ const BuyCryptoRoot: React.VFC<
       const requestData: ExternalServicesConfigRequestParams = {
         currentLocationCountry: locationData?.countryShortCode,
         currentLocationState: locationData?.stateShortCode,
+        bitpayIdLocationCountry: user?.country,
+        bitpayIdLocationState: user?.state,
       };
-      const config: ExternalServicesConfig = await getExternalServicesConfig(
-        requestData,
+      const config: ExternalServicesConfig = await dispatch(
+        getExternalServicesConfig(requestData),
       );
       buyCryptoConfig = config?.buyCrypto;
       logger.debug('buyCryptoConfig: ' + JSON.stringify(buyCryptoConfig));
@@ -563,7 +580,15 @@ const BuyCryptoRoot: React.VFC<
       return;
     }
 
-    const limits = dispatch(getBuyCryptoFiatLimits(undefined, fiatCurrency));
+    if (preSetPartner) {
+      logger.debug(
+        `preSetPartner: ${preSetPartner} - fromAmount: ${fromAmount} - fromCurrencyAbbreviation: ${fromCurrencyAbbreviation} - fromChain: ${fromChain}`,
+      );
+    }
+
+    const limits = dispatch(
+      getBuyCryptoFiatLimits(preSetPartner, fiatCurrency),
+    );
 
     if (limits.min !== undefined && amount < limits.min) {
       setAmount(limits.min);
@@ -870,6 +895,7 @@ const BuyCryptoRoot: React.VFC<
         coin={selectedWallet?.currencyAbbreviation}
         chain={selectedWallet?.chain}
         currency={fiatCurrency}
+        preSetPartner={preSetPartner}
       />
     </>
   );

@@ -1,3 +1,4 @@
+import {SignClientTypes} from '@walletconnect/types';
 import {ColorSchemeName, EventSubscription} from 'react-native';
 import {ContentCard} from 'react-native-appboy-sdk';
 import {AltCurrenciesRowProps} from '../../components/list/AltCurrenciesRow';
@@ -11,6 +12,7 @@ import {
   AppIdentity,
   HomeCarouselConfig,
   HomeCarouselLayoutType,
+  InAppNotificationContextType,
 } from './app.models';
 import {ModalId, FeedbackType} from './app.reducer';
 import {AppActionType, AppActionTypes} from './app.types';
@@ -63,6 +65,19 @@ export const dismissOnGoingProcessModal = (): AppActionType => ({
   type: AppActionTypes.DISMISS_ONGOING_PROCESS_MODAL,
 });
 
+export const showInAppNotification = (
+  context: InAppNotificationContextType,
+  message: string,
+  request: SignClientTypes.EventArguments['session_request'],
+): AppActionType => ({
+  type: AppActionTypes.SHOW_IN_APP_NOTIFICATION,
+  payload: {context, message, request},
+});
+
+export const dismissInAppNotification = (): AppActionType => ({
+  type: AppActionTypes.DISMISS_IN_APP_NOTIFICATION,
+});
+
 export const showBottomNotificationModal = (
   config: BottomNotificationConfig,
 ): AppActionType => ({
@@ -81,11 +96,6 @@ export const resetBottomNotificationModalConfig = (): AppActionType => ({
 export const setColorScheme = (scheme: ColorSchemeName): AppActionType => ({
   type: AppActionTypes.SET_COLOR_SCHEME,
   payload: scheme,
-});
-
-export const setCurrentRoute = (route: any): AppActionType => ({
-  type: AppActionTypes.SET_CURRENT_ROUTE,
-  payload: route,
 });
 
 export const successGenerateAppIdentity = (
@@ -190,6 +200,11 @@ export const showBlur = (value: boolean): AppActionType => ({
 
 export const showPortfolioValue = (value: boolean): AppActionType => ({
   type: AppActionTypes.SHOW_PORTFOLIO_VALUE,
+  payload: value,
+});
+
+export const toggleHideAllBalances = (value?: boolean): AppActionType => ({
+  type: AppActionTypes.TOGGLE_HIDE_ALL_BALANCES,
   payload: value,
 });
 
@@ -308,11 +323,4 @@ export const setHasViewedZenLedgerWarning = (): AppActionType => ({
 export const setUserFeedback = (feedBack: FeedbackType): AppActionType => ({
   type: AppActionTypes.USER_FEEDBACK,
   payload: feedBack,
-});
-
-export const setExpectedKeyLengthChange = (
-  lengthChange: number,
-): AppActionType => ({
-  type: AppActionTypes.EXPECTED_KEY_LENGTH_CHANGE,
-  payload: lengthChange,
 });

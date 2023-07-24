@@ -54,7 +54,10 @@ import {BwcProvider} from '../../../../lib/bwc';
 import {createWalletAddress, ToCashAddress} from '../address/address';
 import {WalletRowProps} from '../../../../components/list/WalletRow';
 import {t} from 'i18next';
-import {startOnGoingProcessModal} from '../../../app/app.effects';
+import {
+  openUrlWithInAppBrowser,
+  startOnGoingProcessModal,
+} from '../../../app/app.effects';
 import {LogActions} from '../../../log';
 import _ from 'lodash';
 import TouchID from 'react-native-touch-id-ng';
@@ -70,6 +73,10 @@ import {navigationRef} from '../../../../Root';
 import {WalletScreens} from '../../../../navigation/wallet/WalletStack';
 import {keyBackupRequired} from '../../../../navigation/tabs/home/components/Crypto';
 import {Analytics} from '../../../analytics/analytics.effects';
+import {AppActions} from '../../../app';
+import {URL} from '../../../../constants';
+import {WCV2RequestType} from '../../../wallet-connect-v2/wallet-connect-v2.models';
+import {WALLET_CONNECT_SUPPORTED_CHAINS} from '../../../../constants/WalletConnectV2';
 
 export const createProposalAndBuildTxDetails =
   (
@@ -108,6 +115,7 @@ export const createProposalAndBuildTxDetails =
             feeLevel: cachedFeeLevel,
             useUnconfirmedFunds,
             queuedTransactions,
+            enableReplaceByFee,
           },
         } = getState();
         const {
@@ -149,6 +157,13 @@ export const createProposalAndBuildTxDetails =
               ),
             });
           }
+        }
+
+        if (
+          currencyAbbreviation === 'btc' &&
+          !(context && ['paypro', 'selectInputs'].includes(context))
+        ) {
+          tx.enableRBF = tx.enableRBF || enableReplaceByFee;
         }
 
         const tokenFeeLevel = token ? cachedFeeLevel.eth : undefined;
@@ -362,6 +377,8 @@ export const buildTxDetails =
     invoice,
     context,
     feeLevel = 'custom',
+    request,
+    feePerKb,
   }: {
     proposal?: TransactionProposal;
     rates: Rates;
@@ -371,12 +388,40 @@ export const buildTxDetails =
     invoice?: Invoice;
     context?: TransactionOptionsContext;
     feeLevel?: string;
+    request?: WCV2RequestType;
+    feePerKb?: number;
   }): Effect<TxDetails> =>
   dispatch => {
-    const {gasPrice, gasLimit, nonce, destinationTag} = proposal || {};
+    let gasPrice, gasLimit, nonce, destinationTag, coin, chain, amount, fee;
+
+    if (context === 'walletConnect' && request) {
+      const {params} = request.params.request;
+      gasPrice = params[0].gasPrice
+        ? parseInt(params[0]?.gasPrice, 16)
+        : feePerKb!;
+      gasLimit =
+        (params[0].gasLimit && parseInt(params[0]?.gasLimit, 16)) ||
+        (params[0].gas && parseInt(params[0]?.gas, 16));
+      nonce = params[0].nonce && parseInt(params[0]?.nonce, 16);
+      coin = chain =
+        WALLET_CONNECT_SUPPORTED_CHAINS[request.params.chainId]?.chain;
+      amount = parseInt(params[0]?.value, 16) || 0;
+      fee = gasLimit * gasPrice;
+    }
+
+    if (proposal) {
+      gasPrice = proposal.gasPrice;
+      gasLimit = proposal.gasLimit;
+      nonce = proposal.nonce;
+      destinationTag = proposal.destinationTag;
+      coin = proposal.coin;
+      chain = proposal.chain;
+      amount = proposal.amount;
+      fee = proposal.fee || 0; // proposal fee is zero for coinbase
+    }
+
     const invoiceCurrency =
       invoice?.buyerProvidedInfo!.selectedTransactionCurrency;
-    let {amount, coin, chain, fee = 0} = proposal || {}; // proposal fee is zero for coinbase
 
     if (invoiceCurrency) {
       amount = invoice.paymentTotals[invoiceCurrency] || 0;
@@ -411,11 +456,9 @@ export const buildTxDetails =
 
     if (invoiceCurrency && context === 'paypro') {
       amount = invoice.paymentTotals[invoiceCurrency];
-    } else if (context === 'speedupBtcReceive') {
-      amount = amount - fee;
     }
-
     const {type, name, address, email} = recipient || {};
+    const percentageOfTotalAmount = (fee / (amount + fee)) * 100;
     return {
       context,
       currency: coin,
@@ -445,8 +488,8 @@ export const buildTxDetails =
             ),
             defaultAltCurrencyIsoCode,
           ),
-          percentageOfTotalAmount:
-            ((fee / (amount + fee)) * 100).toFixed(2) + '%',
+          percentageOfTotalAmountStr: `${percentageOfTotalAmount.toFixed(2)} %`,
+          percentageOfTotalAmount,
         },
       }),
       ...(networkCost && {
@@ -898,7 +941,9 @@ export const publishAndSign =
       }
       if (key.isPrivKeyEncrypted && !signingMultipleProposals) {
         try {
-          password = await new Promise<string>((_resolve, _reject) => {
+          password = await new Promise<string>(async (_resolve, _reject) => {
+            dispatch(dismissOnGoingProcessModal()); // dismiss any previous modal
+            await sleep(500);
             dispatch(
               showDecryptPasswordModal({
                 onSubmitHandler: async (_password: string) => {
@@ -1037,7 +1082,9 @@ export const publishAndSignMultipleProposals =
         }
         if (key.isPrivKeyEncrypted) {
           try {
-            password = await new Promise<string>((_resolve, _reject) => {
+            password = await new Promise<string>(async (_resolve, _reject) => {
+              dispatch(dismissOnGoingProcessModal()); // dismiss any previous modal
+              await sleep(500);
               dispatch(
                 showDecryptPasswordModal({
                   onSubmitHandler: async (_password: string) => {
@@ -1251,18 +1298,22 @@ export const createPayProTxProposal =
     message?: string;
   }): Promise<Effect<Promise<any>>> =>
   async dispatch => {
-    const payProDetails = await GetPayProDetails({
-      paymentUrl,
-      coin: wallet!.currencyAbbreviation,
-      chain: wallet!.chain,
-    });
-    const confirmScreenParams = await HandlePayPro({
-      payProDetails,
-      payProOptions,
-      url: paymentUrl,
-      coin: wallet!.currencyAbbreviation,
-      chain: wallet!.chain,
-    });
+    const payProDetails = await dispatch(
+      GetPayProDetails({
+        paymentUrl,
+        coin: wallet!.currencyAbbreviation,
+        chain: wallet!.chain,
+      }),
+    );
+    const confirmScreenParams = await dispatch(
+      HandlePayPro({
+        payProDetails,
+        payProOptions,
+        url: paymentUrl,
+        coin: wallet!.currencyAbbreviation,
+        chain: wallet!.chain,
+      }),
+    );
     const {
       toAddress: address,
       requiredFeeRate: feePerKb,
@@ -1624,4 +1675,52 @@ export const receiveCrypto =
         });
       }
     }
+  };
+
+export const showConfirmAmountInfoSheet =
+  (type: 'total' | 'subtotal'): Effect<void> =>
+  dispatch => {
+    let title: string, message: string, readMoreUrl: string;
+
+    switch (type) {
+      case 'total':
+        title = t('Total');
+        message = t(
+          'The total amount is the subtotal amount plus transaction fees.',
+        );
+        readMoreUrl = URL.HELP_MINER_FEES;
+        break;
+      case 'subtotal':
+        title = t('Subtotal');
+        message = t(
+          'For BitPay invoices the subtotal amount is the product or service amount plus network costs.',
+        );
+        readMoreUrl = URL.HELP_PAYPRO_NETWORK_COST;
+        break;
+      default:
+        return;
+    }
+
+    dispatch(
+      AppActions.showBottomNotificationModal({
+        type: 'info',
+        title,
+        message,
+        enableBackdropDismiss: true,
+        actions: [
+          {
+            text: t('Read more'),
+            action: async () => {
+              await sleep(1000);
+              dispatch(openUrlWithInAppBrowser(readMoreUrl));
+            },
+            primary: true,
+          },
+          {
+            text: t('GOT IT'),
+            action: () => {},
+          },
+        ],
+      }),
+    );
   };

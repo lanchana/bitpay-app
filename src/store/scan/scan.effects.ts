@@ -21,6 +21,7 @@ import {
   IsValidEthereumUri,
   IsValidMaticUri,
   IsValidMaticAddress,
+  isValidBuyCryptoUri,
   isValidMoonpayUri,
   IsValidImportPrivateKey,
   IsValidJoinCode,
@@ -30,9 +31,9 @@ import {
   isValidRampUri,
   IsValidRippleAddress,
   IsValidRippleUri,
+  isValidSardineUri,
   isValidSimplexUri,
   isValidWalletConnectUri,
-  isValidWyreUri,
   IsBitPayInvoiceWebUrl,
 } from '../wallet/utils/validations';
 import {APP_DEEPLINK_PREFIX} from '../../constants/config';
@@ -40,14 +41,11 @@ import {BuyCryptoActions} from '../buy-crypto';
 import {
   MoonpayIncomingData,
   RampIncomingData,
+  SardineIncomingData,
   SimplexIncomingData,
-  WyrePaymentData,
 } from '../buy-crypto/buy-crypto.models';
 import {LogActions} from '../log';
-import {
-  openUrlWithInAppBrowser,
-  startOnGoingProcessModal,
-} from '../app/app.effects';
+import {startOnGoingProcessModal} from '../app/app.effects';
 import {
   dismissOnGoingProcessModal,
   showBottomNotificationModal,
@@ -67,16 +65,23 @@ import {
   bitcoreLibs,
   GetAddressNetwork,
 } from '../wallet/effects/address/address';
-import {Network, URL as _URL} from '../../constants';
+import {Network} from '../../constants';
 import BitPayIdApi from '../../api/bitpay';
 import axios from 'axios';
 import {t} from 'i18next';
-import {GeneralError} from '../../navigation/wallet/components/ErrorMessages';
+import {
+  CustomErrorMessage,
+  GeneralError,
+} from '../../navigation/wallet/components/ErrorMessages';
 import {StackActions} from '@react-navigation/native';
 import {BitpaySupportedEvmCoins} from '../../constants/currencies';
 import {Analytics} from '../analytics/analytics.effects';
-import {walletConnectV2OnSessionProposal} from '../wallet-connect-v2/wallet-connect-v2.effects';
 import {parseUri} from '@walletconnect/utils';
+import {Invoice} from '../shop/shop.models';
+import {calculateUsdToAltFiat} from '../buy-crypto/buy-crypto.effects';
+import {IsUtxoCoin} from '../wallet/utils/currency';
+import {BWCErrorMessage} from '../../constants/BWCError';
+import {walletConnectV2OnSessionProposal} from '../wallet-connect-v2/wallet-connect-v2.effects';
 
 export const incomingData =
   (
@@ -107,7 +112,7 @@ export const incomingData =
       }
       // Paypro
       else if (IsValidPayPro(data)) {
-        dispatch(goToPayPro(data));
+        dispatch(goToPayPro(data, undefined, undefined, opts?.wallet));
         // Plain Address (Bitcoin)
       } else if (IsValidBitcoinAddress(data)) {
         dispatch(handlePlainAddress(data, coin || 'btc', chain || 'btc', opts));
@@ -160,18 +165,21 @@ export const incomingData =
         // Wallet Connect URI
       } else if (isValidWalletConnectUri(data)) {
         dispatch(handleWalletConnectUri(data));
+        // Buy Crypto
+      } else if (isValidBuyCryptoUri(data)) {
+        dispatch(handleBuyCryptoUri(data));
         // Moonpay
       } else if (isValidMoonpayUri(data)) {
         dispatch(handleMoonpayUri(data));
-        // Simplex
+        // Ramp
       } else if (isValidRampUri(data)) {
         dispatch(handleRampUri(data));
+        // Sardine
+      } else if (isValidSardineUri(data)) {
+        dispatch(handleSardineUri(data));
         // Simplex
       } else if (isValidSimplexUri(data)) {
         dispatch(handleSimplexUri(data));
-        // Wyre
-      } else if (isValidWyreUri(data)) {
-        dispatch(handleWyreUri(data));
         // BitPay URI
       } else if (IsValidBitPayUri(data)) {
         dispatch(handleBitPayUri(data, opts?.wallet));
@@ -210,16 +218,29 @@ const getParameterByName = (name: string, url: string): string | undefined => {
 };
 
 const goToPayPro =
-  (data: string, replaceNavigationRoute?: boolean): Effect =>
+  (
+    data: string,
+    replaceNavigationRoute?: boolean,
+    invoice?: Invoice,
+    wallet?: Wallet,
+  ): Effect =>
   async dispatch => {
     dispatch(dismissOnGoingProcessModal());
-
-    dispatch(startOnGoingProcessModal('FETCHING_PAYMENT_OPTIONS'));
-
+    const invoiceId = data.split('/i/')[1].split('?')[0];
     const payProUrl = GetPayProUrl(data);
+    const {host} = new URL(payProUrl);
 
     try {
-      const payProOptions = await GetPayProOptions(payProUrl);
+      dispatch(startOnGoingProcessModal('FETCHING_PAYMENT_INFO'));
+      const payProOptions = await dispatch(GetPayProOptions(payProUrl));
+      const getInvoiceResponse = await axios.get(
+        `https://${host}/invoices/${invoiceId}`,
+      );
+      const {
+        data: {data: fetchedInvoice},
+      } = getInvoiceResponse as {data: {data: Invoice}};
+      const _invoice: Invoice = invoice || fetchedInvoice;
+
       dispatch(dismissOnGoingProcessModal());
 
       if (replaceNavigationRoute) {
@@ -228,23 +249,24 @@ const goToPayPro =
             screen: WalletScreens.PAY_PRO_CONFIRM,
             params: {
               payProOptions,
+              invoice: _invoice,
+              wallet,
             },
           }),
         );
         return;
       }
-
-      InteractionManager.runAfterInteractions(() => {
-        navigationRef.navigate('Wallet', {
-          screen: WalletScreens.PAY_PRO_CONFIRM,
-          params: {
-            payProOptions,
-          },
-        });
+      navigationRef.navigate('Wallet', {
+        screen: WalletScreens.PAY_PRO_CONFIRM,
+        params: {
+          payProOptions,
+          invoice: _invoice,
+          wallet,
+        },
       });
     } catch (e: any) {
       dispatch(dismissOnGoingProcessModal());
-      await sleep(400);
+      await sleep(800);
 
       dispatch(
         showBottomNotificationModal({
@@ -265,7 +287,7 @@ const goToPayPro =
   };
 
 const handleUnlock =
-  (data: string): Effect =>
+  (data: string, wallet?: Wallet): Effect =>
   async dispatch => {
     const invoiceId = data.split('/i/')[1].split('?')[0];
     const network = data.includes('test.bitpay.com')
@@ -274,14 +296,14 @@ const handleUnlock =
     const result = await dispatch(unlockInvoice(invoiceId, network));
 
     if (result === 'unlockSuccess') {
-      dispatch(goToPayPro(data));
+      dispatch(goToPayPro(data, undefined, undefined, wallet));
       return;
     }
 
     const {host} = new URL(GetPayProUrl(data));
 
     try {
-      const invoice = await axios.get(
+      const {data: invoice} = await axios.get(
         `https://${host}/invoiceData/${invoiceId}`,
       );
       if (invoice) {
@@ -297,7 +319,7 @@ const handleUnlock =
             },
           } = invoice;
           if (emailAddress || buyerProvidedEmail || status !== 'new') {
-            dispatch(goToPayPro(data));
+            dispatch(goToPayPro(data, undefined, undefined, wallet));
           } else {
             navigationRef.navigate('Wallet', {
               screen: 'EnterBuyerProvidedEmail',
@@ -305,7 +327,8 @@ const handleUnlock =
             });
           }
         } else {
-          dispatch(goToPayPro(data));
+          const _invoice = invoice?.invoice || invoice;
+          dispatch(goToPayPro(data, undefined, _invoice, wallet));
         }
         return;
       }
@@ -952,6 +975,70 @@ const handleLitecoinUri =
     }
   };
 
+const handleBuyCryptoUri =
+  (data: string): Effect<void> =>
+  (dispatch, getState) => {
+    dispatch(
+      LogActions.info('Incoming-data (redirect): Buy crypto pre-set: ' + data),
+    );
+
+    const res = data.replace(new RegExp('&amp;', 'g'), '&');
+    const partner = getParameterByName('partner', res)?.toLowerCase();
+    const amount = getParameterByName('amount', res);
+    let coin = getParameterByName('coin', res)?.toLowerCase();
+    let chain = getParameterByName('chain', res)?.toLowerCase();
+
+    let _amount: number | undefined;
+    if (amount) {
+      const {APP} = getState();
+      const altCurrency = APP.defaultAltCurrency?.isoCode;
+      _amount =
+        altCurrency === 'USD'
+          ? Number(amount)
+          : dispatch(
+              calculateUsdToAltFiat(Number(amount), altCurrency || 'USD'),
+            );
+    }
+
+    if (coin && !chain) {
+      if (IsUtxoCoin(coin)) {
+        chain = coin;
+      } else {
+        coin = undefined;
+      }
+    }
+
+    dispatch(
+      Analytics.track('Clicked Buy Crypto', {
+        context: 'DeepLink',
+        coin: coin || '',
+        chain: chain || '',
+      }),
+    );
+
+    navigationRef.reset({
+      index: 2,
+      routes: [
+        {
+          name: 'Tabs',
+          params: {screen: 'Home'},
+        },
+        {
+          name: 'BuyCrypto',
+          params: {
+            screen: 'BuyCryptoRoot',
+            params: {
+              partner,
+              amount: _amount,
+              currencyAbbreviation: coin,
+              chain,
+            },
+          },
+        },
+      ],
+    });
+  };
+
 const handleMoonpayUri =
   (data: string): Effect<void> =>
   (dispatch, getState) => {
@@ -1066,6 +1153,69 @@ const handleRampUri =
     });
   };
 
+const handleSardineUri =
+  (data: string): Effect<void> =>
+  (dispatch, getState) => {
+    dispatch(LogActions.info('Incoming-data (redirect): Sardine URL: ' + data));
+
+    data = data.replace('?order_id', '&order_id');
+    const res = data.replace(new RegExp('&amp;', 'g'), '&');
+    const sardineExternalId = getParameterByName('sardineExternalId', res);
+    if (!sardineExternalId) {
+      dispatch(LogActions.warn('No sardineExternalId present. Do not redir'));
+      return;
+    }
+
+    const order_id = getParameterByName('order_id', res);
+    const walletId = getParameterByName('walletId', res);
+    const status = getParameterByName('status', res);
+
+    const stateParams: SardineIncomingData = {
+      sardineExternalId,
+      walletId,
+      status,
+      order_id,
+    };
+
+    dispatch(
+      BuyCryptoActions.updatePaymentRequestSardine({
+        sardineIncomingData: stateParams,
+      }),
+    );
+
+    if (order_id) {
+      const {BUY_CRYPTO} = getState();
+      const order = BUY_CRYPTO.sardine[sardineExternalId];
+
+      dispatch(
+        Analytics.track('Purchased Buy Crypto', {
+          exchange: 'sardine',
+          fiatAmount: order?.fiat_total_amount || '',
+          fiatCurrency: order?.fiat_total_amount_currency || '',
+          coin: order?.coin?.toLowerCase() || '',
+          chain: order?.chain?.toLowerCase() || '',
+        }),
+      );
+    }
+
+    navigationRef.reset({
+      index: 2,
+      routes: [
+        {
+          name: 'Tabs',
+          params: {screen: 'Home'},
+        },
+        {
+          name: 'ExternalServicesSettings',
+          params: {
+            screen: 'SardineSettings',
+            params: {incomingPaymentRequest: stateParams},
+          },
+        },
+      ],
+    });
+  };
+
 const handleSimplexUri =
   (data: string): Effect<void> =>
   (dispatch, getState) => {
@@ -1126,125 +1276,50 @@ const handleSimplexUri =
     });
   };
 
-const handleWyreUri =
-  (data: string): Effect<void> =>
-  dispatch => {
-    dispatch(LogActions.info('Incoming-data (redirect): Wyre URL: ' + data));
-
-    if (data.indexOf('wyreError') >= 0) {
-      navigationRef.navigate('ExternalServicesSettings', {
-        screen: 'WyreSettings',
-        params: {
-          paymentRequestError: true,
-        },
-      });
-      return;
-    }
-
-    if (data === 'wyre') {
-      return;
-    }
-    const res = data.replace(new RegExp('&amp;', 'g'), '&');
-    const orderId = getParameterByName('id', res);
-    if (!orderId) {
-      dispatch(LogActions.warn('No orderId present. Do not redir'));
-      return;
-    }
-
-    const walletId = getParameterByName('walletId', res);
-    const destCurrency = getParameterByName('destCurrency', res);
-    const destChain = getParameterByName('destChain', res);
-    const sourceCurrency = getParameterByName('sourceCurrency', res);
-    const sourceAmount = getParameterByName('sourceAmount', res);
-
-    const stateParams: WyrePaymentData = {
-      orderId,
-      transferId: getParameterByName('transferId', res),
-      owner: getParameterByName('owner', res),
-      accountId: getParameterByName('accountId', res),
-      walletId,
-      dest: getParameterByName('dest', res),
-      destAmount: getParameterByName('destAmount', res),
-      destChain,
-      destCurrency,
-      purchaseAmount: getParameterByName('purchaseAmount', res),
-      sourceAmount,
-      sourceCurrency,
-      status: getParameterByName('status', res),
-      createdAt: getParameterByName('createdAt', res),
-      paymentMethodName: getParameterByName('paymentMethodName', res),
-      blockchainNetworkTx: getParameterByName('blockchainNetworkTx', res),
-      env: __DEV__ ? 'dev' : 'prod',
-      created_on: Date.now(),
-    };
-
-    dispatch(
-      BuyCryptoActions.successPaymentRequestWyre({
-        wyrePaymentData: stateParams,
-      }),
-    );
-
-    dispatch(
-      Analytics.track('Purchased Buy Crypto', {
-        exchange: 'wyre',
-        fiatAmount: sourceAmount || '',
-        fiatCurrency: sourceCurrency || '',
-        coin: destCurrency?.toLowerCase() || '',
-        chain: destChain?.toLowerCase() || '',
-      }),
-    );
-
-    navigationRef.reset({
-      index: 2,
-      routes: [
-        {
-          name: 'Tabs',
-          params: {screen: 'Home'},
-        },
-        {
-          name: 'ExternalServicesSettings',
-          params: {
-            screen: 'WyreSettings',
-            params: {incomingPaymentRequest: stateParams},
-          },
-        },
-      ],
-    });
-  };
-
 const handleWalletConnectUri =
   (data: string): Effect<void> =>
-  async dispatch => {
+  async (dispatch, getState) => {
     try {
       if (isValidWalletConnectUri(data)) {
         const {version} = parseUri(data);
         if (version === 1) {
-          navigationRef.navigate('WalletConnect', {
-            screen: 'Root',
-            params: {
-              uri: data,
-            },
-          });
+          const errMsg = t(
+            'The URI corresponds to WalletConnect v1.0, which was shut down on June 28.',
+          );
+          throw errMsg;
         } else {
-          dispatch(startOnGoingProcessModal('LOADING'));
-          const proposal = (await dispatch<any>(
-            walletConnectV2OnSessionProposal(data),
-          )) as any;
-          dispatch(dismissOnGoingProcessModal());
-          await sleep(500);
+          await dispatch(walletConnectV2OnSessionProposal(data));
           navigationRef.navigate('WalletConnect', {
             screen: 'Root',
-            params: {
-              proposal,
-            },
+            params: {},
           });
         }
+      } else {
+        const errMsg = t('The URI does not correspond to WalletConnect.');
+        throw errMsg;
       }
     } catch (e: any) {
-      dispatch(dismissOnGoingProcessModal());
-      await sleep(500);
-
-      dispatch(showBottomNotificationModal(GeneralError()));
+      const proposal = getState().WALLET_CONNECT_V2.proposal;
+      if (
+        proposal &&
+        typeof e === 'object' &&
+        e !== null &&
+        e.message?.includes('Pairing already exists:')
+      ) {
+        navigationRef.navigate('WalletConnect', {
+          screen: 'Root',
+          params: {uri: data},
+        });
+      } else {
+        dispatch(
+          showBottomNotificationModal(
+            CustomErrorMessage({
+              errMsg: BWCErrorMessage(e),
+              title: t('Uh oh, something went wrong'),
+            }),
+          ),
+        );
+      }
     }
   };
 

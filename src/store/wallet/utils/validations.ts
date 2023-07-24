@@ -43,6 +43,11 @@ export const isValidWalletConnectUri = (data: string): boolean => {
   return !!/(wallet\/wc|wc:)/g.exec(data);
 };
 
+export const isValidBuyCryptoUri = (data: string): boolean => {
+  data = SanitizeUri(data);
+  return !!data?.includes('buyCrypto');
+};
+
 export const isValidMoonpayUri = (data: string): boolean => {
   data = SanitizeUri(data);
   return !!data?.includes('moonpay');
@@ -53,14 +58,14 @@ export const isValidRampUri = (data: string): boolean => {
   return !!data?.includes('ramp');
 };
 
+export const isValidSardineUri = (data: string): boolean => {
+  data = SanitizeUri(data);
+  return !!data?.includes('sardine');
+};
+
 export const isValidSimplexUri = (data: string): boolean => {
   data = SanitizeUri(data);
   return !!data?.includes('simplex');
-};
-
-export const isValidWyreUri = (data: string): boolean => {
-  data = SanitizeUri(data);
-  return !!(data?.includes('wyre') || data?.includes('wyreError'));
 };
 
 export const IsValidBitcoinUri = (data: string): boolean => {

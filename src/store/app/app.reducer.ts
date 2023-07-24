@@ -12,23 +12,26 @@ import {
 } from '../../constants/config';
 import {SettingsListType} from '../../navigation/tabs/settings/SettingsRoot';
 import {DecryptPasswordConfig} from '../../navigation/wallet/components/DecryptEnterPasswordModal';
-import {NavScreenParams, RootStackParamList} from '../../Root';
 import {
   AppIdentity,
   HomeCarouselConfig,
   HomeCarouselLayoutType,
+  InAppNotificationContextType,
 } from './app.models';
 import {AppActionType, AppActionTypes} from './app.types';
 import uniqBy from 'lodash.uniqby';
 import {BiometricModalConfig} from '../../components/modal/biometric/BiometricModal';
 import {FeedbackRateType} from '../../navigation/tabs/settings/about/screens/SendFeedback';
 import moment from 'moment';
+import {SignClientTypes} from '@walletconnect/types';
 
 export const appReduxPersistBlackList: Array<keyof AppState> = [
   'appIsLoading',
   'appWasInit',
   'showOnGoingProcessModal',
   'onGoingProcessModalMessage',
+  'showInAppNotification',
+  'inAppNotificationData',
   'showDecryptPasswordModal',
   'showPinModal',
   'pinModalConfig',
@@ -38,10 +41,13 @@ export const appReduxPersistBlackList: Array<keyof AppState> = [
   'activeModalId',
   'failedAppInit',
   'brazeContentCardSubscription',
-  'expectedKeyLengthChange',
 ];
 
-export type ModalId = 'sheetModal' | 'ongoingProcess' | 'pin';
+export type ModalId =
+  | 'sheetModal'
+  | 'ongoingProcess'
+  | 'pin'
+  | 'inAppNotification';
 
 export type FeedbackType = {
   time: number;
@@ -80,9 +86,16 @@ export interface AppState {
   onboardingCompleted: boolean;
   showOnGoingProcessModal: boolean;
   onGoingProcessModalMessage: string | undefined;
+  showInAppNotification: boolean;
+  inAppNotificationData:
+    | {
+        context: InAppNotificationContextType;
+        message: string;
+        request?: SignClientTypes.EventArguments['session_request'];
+      }
+    | undefined;
   showBottomNotificationModal: boolean;
   bottomNotificationModalConfig: BottomNotificationConfig | undefined;
-  currentRoute: [keyof RootStackParamList, NavScreenParams] | undefined;
   notificationsAccepted: boolean;
   confirmedTxAccepted: boolean;
   announcementsAccepted: boolean;
@@ -102,6 +115,7 @@ export interface AppState {
   colorScheme: ColorSchemeName;
   defaultLanguage: string;
   showPortfolioValue: boolean;
+  hideAllBalances: boolean;
   brazeContentCardSubscription: EventSubscription | null;
   brazeContentCards: ContentCard[];
   brazeEid: string | undefined;
@@ -123,7 +137,6 @@ export interface AppState {
   failedAppInit: boolean;
   checkingBiometricForSending: boolean;
   hasViewedZenLedgerWarning: boolean;
-  expectedKeyLengthChange: number;
 }
 
 const initialState: AppState = {
@@ -155,9 +168,10 @@ const initialState: AppState = {
   onboardingCompleted: false,
   showOnGoingProcessModal: false,
   onGoingProcessModalMessage: undefined,
+  showInAppNotification: false,
+  inAppNotificationData: undefined,
   showBottomNotificationModal: false,
   bottomNotificationModalConfig: undefined,
-  currentRoute: undefined,
   notificationsAccepted: false,
   confirmedTxAccepted: false,
   announcementsAccepted: false,
@@ -177,6 +191,7 @@ const initialState: AppState = {
   colorScheme: null,
   defaultLanguage: i18n.language || 'en',
   showPortfolioValue: true,
+  hideAllBalances: false,
   brazeContentCardSubscription: null,
   brazeContentCards: [],
   brazeEid: undefined,
@@ -198,7 +213,6 @@ const initialState: AppState = {
   failedAppInit: false,
   checkingBiometricForSending: false,
   hasViewedZenLedgerWarning: false,
-  expectedKeyLengthChange: 0,
 };
 
 export const appReducer = (
@@ -273,6 +287,20 @@ export const appReducer = (
         showOnGoingProcessModal: false,
       };
 
+    case AppActionTypes.SHOW_IN_APP_NOTIFICATION:
+      return {
+        ...state,
+        showInAppNotification: true,
+        inAppNotificationData: action.payload,
+      };
+
+    case AppActionTypes.DISMISS_IN_APP_NOTIFICATION:
+      return {
+        ...state,
+        showInAppNotification: false,
+        inAppNotificationData: undefined,
+      };
+
     case AppActionTypes.SHOW_BOTTOM_NOTIFICATION_MODAL:
       return {
         ...state,
@@ -296,12 +324,6 @@ export const appReducer = (
       return {
         ...state,
         colorScheme: action.payload,
-      };
-
-    case AppActionTypes.SET_CURRENT_ROUTE:
-      return {
-        ...state,
-        currentRoute: action.payload,
       };
 
     case AppActionTypes.SUCCESS_GENERATE_APP_IDENTITY:
@@ -421,6 +443,12 @@ export const appReducer = (
       return {
         ...state,
         showPortfolioValue: action.payload,
+      };
+
+    case AppActionTypes.TOGGLE_HIDE_ALL_BALANCES:
+      return {
+        ...state,
+        hideAllBalances: action.payload ?? !state.hideAllBalances,
       };
 
     case AppActionTypes.BRAZE_INITIALIZED:
@@ -580,12 +608,6 @@ export const appReducer = (
       return {
         ...state,
         userFeedback: action.payload,
-      };
-
-    case AppActionTypes.EXPECTED_KEY_LENGTH_CHANGE:
-      return {
-        ...state,
-        expectedKeyLengthChange: action.payload,
       };
 
     default:

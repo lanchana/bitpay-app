@@ -39,7 +39,7 @@ import {AppActions} from '../../../../../store/app';
 import GiftCardDiscountText from '../../components/GiftCardDiscountText';
 import {formatFiatAmount, sleep} from '../../../../../utils/helper-methods';
 import {CustomErrorMessage} from '../../../../wallet/components/ErrorMessages';
-import {ShopActions, ShopEffects} from '../../../../../store/shop';
+import {ShopActions} from '../../../../../store/shop';
 import {APP_NETWORK} from '../../../../../constants/config';
 import {useAppSelector} from '../../../../../utils/hooks';
 import {TouchableWithoutFeedback} from 'react-native-gesture-handler';
@@ -122,11 +122,11 @@ const BuyGiftCard = ({
   const syncGiftCardPurchasesWithBitPayId = useAppSelector(
     ({SHOP}) => SHOP.syncGiftCardPurchasesWithBitPayId,
   );
-  const {
-    email: savedEmail,
-    phone: savedPhone,
-    phoneCountryInfo: savedPhoneCountryInfo,
-  } = useAppSelector(({SHOP}) => SHOP);
+  const savedEmail = useAppSelector(({SHOP}) => SHOP.email);
+  const savedPhone = useAppSelector(({SHOP}) => SHOP.phone);
+  const savedPhoneCountryInfo = useAppSelector(
+    ({SHOP}) => SHOP.phoneCountryInfo,
+  );
   const shouldSync = user && syncGiftCardPurchasesWithBitPayId;
   const [selectedAmountIndex, setSelectedAmountIndex] = useState(
     getMiddleIndex(cardConfig.supportedAmounts || []),

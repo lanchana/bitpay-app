@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useEffect, useState} from 'react';
 import styled from 'styled-components/native';
 import {
   Caution,
@@ -86,6 +86,7 @@ import {
 import {useTranslation} from 'react-i18next';
 import {KeyboardAwareScrollView} from 'react-native-keyboard-aware-scroll-view';
 import {Analytics} from '../../../store/analytics/analytics.effects';
+import {IS_ANDROID, IS_IOS} from '../../../constants';
 
 const ScrollViewContainer = styled(KeyboardAwareScrollView)`
   margin-top: 20px;
@@ -609,7 +610,9 @@ const RecoveryPhrase = () => {
               value={value}
               autoCorrect={false}
               spellCheck={false}
-              textContentType={'password'}
+              autoComplete="off"
+              textContentType={IS_IOS ? 'password' : undefined}
+              keyboardType={IS_ANDROID ? 'visible-password' : undefined}
             />
           )}
           name="text"

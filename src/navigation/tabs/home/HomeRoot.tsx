@@ -7,7 +7,6 @@ import {each} from 'lodash';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {useTranslation} from 'react-i18next';
 import {RefreshControl, ScrollView} from 'react-native';
-import {batch} from 'react-redux';
 import {STATIC_CONTENT_CARDS_ENABLED} from '../../../constants/config';
 import {SupportedCoinsOptions} from '../../../constants/SupportedCurrencyOptions';
 import {
@@ -76,17 +75,19 @@ const HomeRoot = () => {
       pendingTxps = pendingTxps.concat(x.pendingTxps);
     }
   });
+  const appIsLoading = useAppSelector(({APP}) => APP.appIsLoading);
+  const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
+  const defaultLanguage = useAppSelector(({APP}) => APP.defaultLanguage);
   const keyMigrationFailure = useAppSelector(
     ({APP}) => APP.keyMigrationFailure,
   );
   const keyMigrationFailureModalHasBeenShown = useAppSelector(
     ({APP}) => APP.keyMigrationFailureModalHasBeenShown,
   );
-  const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
+  const showPortfolioValue = useAppSelector(({APP}) => APP.showPortfolioValue);
   const hasKeys = Object.values(keys).length;
   const cardGroups = useAppSelector(selectCardGroups);
   const hasCards = cardGroups.length > 0;
-  const defaultLanguage = useAppSelector(({APP}) => APP.defaultLanguage);
   useBrazeRefreshOnFocus();
 
   // Shop with Crypto
@@ -147,9 +148,6 @@ const HomeRoot = () => {
     return brazeQuickLinks;
   }, [brazeQuickLinks, defaultLanguage]);
 
-  const showPortfolioValue = useAppSelector(({APP}) => APP.showPortfolioValue);
-  const appIsLoading = useAppSelector(({APP}) => APP.appIsLoading);
-
   useEffect(() => {
     return navigation.addListener('focus', () => {
       if (!appIsLoading) {
@@ -187,9 +185,7 @@ const HomeRoot = () => {
 
   useEffect(() => {
     if (keyMigrationFailure && !keyMigrationFailureModalHasBeenShown) {
-      batch(() => {
-        dispatch(setShowKeyMigrationFailureModal(true));
-      });
+      dispatch(setShowKeyMigrationFailureModal(true));
     }
   }, [dispatch, keyMigrationFailure, keyMigrationFailureModalHasBeenShown]);
 

@@ -44,15 +44,20 @@ export interface SecuritySettings {
 export interface User {
   email: string;
   eid: string;
+  country?: string;
   familyName?: string;
   givenName?: string;
   incentiveLevel?: string;
   incentiveLevelId?: string;
+  methodEntityId?: string;
+  phone?: string;
   userSettings: {
     acknowledgePrivacyNotice?: boolean;
     agreedCardholderAgreement?: boolean;
     optInEmailMarketing?: boolean;
   };
   referralCode?: string;
+  state?: string;
   name?: string;
+  verified?: boolean;
 }

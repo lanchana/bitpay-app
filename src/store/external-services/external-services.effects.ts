@@ -1,30 +1,44 @@
 import axios from 'axios';
-import {APP_VERSION} from '../../constants/config';
+import {Platform} from 'react-native';
+import {Effect} from '..';
+import {LogActions} from '../log';
+import {APP_VERSION, BASE_BWS_URL} from '../../constants/config';
 import {ExternalServicesConfigRequestParams} from './external-services.types';
 
-const uri = 'https://bws.bitpay.com/bws/api';
+const bwsUri = BASE_BWS_URL;
 
-export const getExternalServicesConfig = async (
-  params: ExternalServicesConfigRequestParams,
-) => {
-  try {
-    const config = {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      params: {
-        currentAppVersion: params.currentAppVersion ?? APP_VERSION,
-        currentLocationCountry: params.currentLocationCountry,
-        currentLocationState: params.currentLocationState,
-        bitpayIdLocationCountry: params.bitpayIdLocationCountry,
-        bitpayIdLocationState: params.bitpayIdLocationState,
-      },
-    };
+export const getExternalServicesConfig =
+  (params: ExternalServicesConfigRequestParams): Effect<Promise<any>> =>
+  async (dispatch): Promise<any> => {
+    try {
+      const config = {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        params: {
+          currentAppVersion: params.currentAppVersion ?? APP_VERSION,
+          currentLocationCountry: params.currentLocationCountry,
+          currentLocationState: params.currentLocationState,
+          bitpayIdLocationCountry: params.bitpayIdLocationCountry,
+          bitpayIdLocationState: params.bitpayIdLocationState,
+          platform: {
+            os: Platform.OS,
+            version: Platform.Version,
+          },
+        },
+      };
 
-    const {data} = await axios.get(uri + '/v1/services', config);
+      dispatch(
+        LogActions.debug(
+          `Getting external services config with params: ${JSON.stringify(
+            config.params,
+          )}`,
+        ),
+      );
+      const {data} = await axios.get(bwsUri + '/v1/services', config);
 
-    return Promise.resolve(data);
-  } catch (err) {
-    return Promise.reject(err);
-  }
-};
+      return Promise.resolve(data);
+    } catch (err) {
+      return Promise.reject(err);
+    }
+  };

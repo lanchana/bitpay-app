@@ -30,7 +30,6 @@ import {
   setWalletTermsAccepted,
   successImport,
   updateCacheFeeLevel,
-  updatePortfolioBalance,
 } from '../../wallet.actions';
 import {
   BitpaySupportedEthereumTokenOpts,
@@ -41,7 +40,6 @@ import RNFS from 'react-native-fs';
 import {
   biometricLockActive,
   currentPin,
-  dismissOnGoingProcessModal,
   pinLockActive,
   setAnnouncementsAccepted,
   setColorScheme,
@@ -50,7 +48,6 @@ import {
   setIntroCompleted,
   setKeyMigrationFailure,
   setOnboardingCompleted,
-  showBottomNotificationModal,
   showPortfolioValue,
   successGenerateAppIdentity,
 } from '../../../app/app.actions';
@@ -59,10 +56,7 @@ import {ContactRowProps} from '../../../../components/list/ContactRow';
 import {Network} from '../../../../constants';
 import {successPairingBitPayId} from '../../../bitpay-id/bitpay-id.actions';
 import {AppIdentity} from '../../../app/app.models';
-import {
-  startUpdateAllKeyAndWalletStatus,
-  startUpdateAllWalletStatusForKey,
-} from '../status/status';
+import {startUpdateAllKeyAndWalletStatus} from '../status/status';
 import {startGetRates} from '../rates/rates';
 import {
   accessTokenSuccess,
@@ -86,7 +80,6 @@ import {initialShopState} from '../../../shop/shop.reducer';
 import {StackActions} from '@react-navigation/native';
 import {BuyCryptoActions} from '../../../buy-crypto';
 import {SwapCryptoActions} from '../../../swap-crypto';
-import {Analytics} from '../../../analytics/analytics.effects';
 import {
   checkNotificationsPermissions,
   setConfirmTxNotifications,
@@ -95,8 +88,6 @@ import {
   subscribeEmailNotifications,
 } from '../../../app/app.effects';
 import {t} from 'i18next';
-import {sleep} from '../../../../utils/helper-methods';
-import {backupRedirect} from '../../../../navigation/wallet/screens/Backup';
 
 const BWC = BwcProvider.getInstance();
 
@@ -810,13 +801,16 @@ export const startImportMnemonic =
         const {key: _key, wallets} = findMatchedKeyAndUpdate(
           data.wallets,
           data.key,
-          Object.values(WALLET.keys),
+          Object.values(WALLET.keys).filter(k => k.id !== 'readonly'), // Avoid checking readonly keys
           opts,
         );
 
         // To clear encrypt password
         if (opts.keyId && isMatch(_key, WALLET.keys[opts.keyId])) {
-          dispatch(deleteKey({keyId: opts.keyId}));
+          const previousKeysLength = Object.keys(WALLET.keys).length;
+          const numNewKeys = Object.keys(WALLET.keys).length - 1;
+          const lengthChange = previousKeysLength - numNewKeys;
+          dispatch(deleteKey({keyId: opts.keyId, lengthChange}));
         }
 
         const key = buildKeyObj({
@@ -915,7 +909,10 @@ export const startImportFile =
           );
           filteredKeys.forEach(w => (w.credentials.keyId = w.keyId = _key.id));
           wallets = wallets.concat(filteredKeys);
-          dispatch(deleteKey({keyId: opts.keyId}));
+          const previousKeysLength = Object.keys(WALLET.keys).length;
+          const numNewKeys = Object.keys(WALLET.keys).length - 1;
+          const lengthChange = previousKeysLength - numNewKeys;
+          dispatch(deleteKey({keyId: opts.keyId, lengthChange}));
         }
 
         const key = buildKeyObj({

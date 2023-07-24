@@ -9,6 +9,7 @@ import {
   WCV2Wallet,
 } from '../../../store/wallet-connect-v2/wallet-connect-v2.models';
 import styled from 'styled-components/native';
+import {findWalletByAddress} from '../../../store/wallet/utils/wallet';
 
 const NoGutter = styled.View`
   margin: 0 -10px;
@@ -19,37 +20,15 @@ const Connections = ({
   session,
   keys,
   wallet: _wallet,
-  peerId,
 }: {
   account?: string;
   session?: WCV2SessionType;
   keys?: {[key in string]: Key};
   wallet?: Wallet;
-  peerId?: string;
 }) => {
   const navigation = useNavigation();
   let address, chain: string;
   let wallet: Wallet | undefined;
-
-  const findWalletByAddress = (
-    address: string,
-    chain: string,
-    network: string,
-    keys: {[key in string]: Key},
-  ): Wallet | undefined => {
-    let wallet: Wallet | undefined;
-    for (let key of Object.values(keys)) {
-      wallet = key.wallets.find(
-        w =>
-          w.receiveAddress === address &&
-          w.chain === chain &&
-          w.network === network,
-      );
-      if (wallet) {
-        return wallet;
-      }
-    }
-  };
 
   if (account && keys) {
     // version 2
@@ -59,11 +38,6 @@ const Connections = ({
     chain = EIP155_CHAINS[protocolChainName]?.chainName;
     const network = EIP155_CHAINS[protocolChainName]?.network;
     wallet = findWalletByAddress(address, chain, network, keys);
-  } else if (_wallet) {
-    // version 1
-    address = _wallet.receiveAddress;
-    chain = _wallet.chain;
-    wallet = _wallet;
   }
 
   const {keyId} = wallet || {};
@@ -75,7 +49,6 @@ const Connections = ({
         topic={session?.topic}
         keyId={keyId!}
         isLast={false}
-        peerId={peerId}
         onPress={(_keyId: string, walletObj: WCV2Wallet) => {
           haptic('impactLight');
           navigation.navigate('WalletConnect', {
@@ -83,7 +56,6 @@ const Connections = ({
             params: {
               topic: session?.topic,
               wallet: walletObj.wallet,
-              peerId,
             },
           });
         }}

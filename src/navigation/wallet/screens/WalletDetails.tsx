@@ -23,7 +23,6 @@ import {
   View,
 } from 'react-native';
 import {TouchableOpacity} from 'react-native-gesture-handler';
-import {batch} from 'react-redux';
 import styled from 'styled-components/native';
 import Settings from '../../../components/settings/Settings';
 import {
@@ -37,13 +36,13 @@ import {
   Small,
 } from '../../../components/styled/Text';
 import {Network} from '../../../constants';
-import {showBottomNotificationModal} from '../../../store/app/app.actions';
+import {
+  showBottomNotificationModal,
+  toggleHideAllBalances,
+} from '../../../store/app/app.actions';
 import {startUpdateWalletStatus} from '../../../store/wallet/effects/status/status';
 import {findWalletById, isSegwit} from '../../../store/wallet/utils/wallet';
-import {
-  toggleHideBalance,
-  updatePortfolioBalance,
-} from '../../../store/wallet/wallet.actions';
+import {updatePortfolioBalance} from '../../../store/wallet/wallet.actions';
 import {
   Key,
   TransactionProposal,
@@ -120,9 +119,14 @@ import {
   SUPPORTED_EVM_COINS,
 } from '../../../constants/currencies';
 import ContactIcon from '../../tabs/contacts/components/ContactIcon';
-import {TRANSACTION_ICON_SIZE} from '../../../constants/TransactionIcons';
+import {
+  TransactionIcons,
+  TRANSACTION_ICON_SIZE,
+} from '../../../constants/TransactionIcons';
 import SentBadgeSvg from '../../../../assets/img/sent-badge.svg';
 import {Analytics} from '../../../store/analytics/analytics.effects';
+import {getGiftCardIcons} from '../../../lib/gift-cards/gift-card';
+import {BillPayAccount} from '../../../store/shop/shop.models';
 
 export type WalletDetailsScreenParamList = {
   walletId: string;
@@ -285,12 +289,14 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
   const {walletId, skipInitializeHistory} = route.params;
   const {keys} = useAppSelector(({WALLET}) => WALLET);
   const {rates} = useAppSelector(({RATE}) => RATE);
+  const supportedCardMap = useAppSelector(({SHOP}) => SHOP.supportedCardMap);
+
   const locationData = useAppSelector(({LOCATION}) => LOCATION.locationData);
 
   const wallets = Object.values(keys).flatMap(k => k.wallets);
 
   const contactList = useAppSelector(({CONTACT}) => CONTACT.list);
-  const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
+  const {defaultAltCurrency, hideAllBalances} = useAppSelector(({APP}) => APP);
   const fullWalletObj = findWalletById(wallets, walletId) as Wallet;
   const key = keys[fullWalletObj.keyId];
   const uiFormattedWallet = buildUIFormattedWallet(
@@ -299,6 +305,9 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
     rates,
     dispatch,
     'symbol',
+  );
+  const accounts = useAppSelector(
+    ({SHOP}) => SHOP.billPayAccounts[uiFormattedWallet.network],
   );
   const [showReceiveAddressBottomModal, setShowReceiveAddressBottomModal] =
     useState(false);
@@ -339,9 +348,26 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
         createWalletAddress({wallet: fullWalletObj, newAddress: false}),
       )) as string;
 
-      await Share.share({
-        message: address,
-      });
+      Share.share(
+        {
+          message: address,
+          title: t('Share Address'),
+        },
+        {
+          dialogTitle: t('Share Address'),
+          subject: t('Share Address'),
+          excludedActivityTypes: [
+            'print',
+            'addToReadingList',
+            'markupAsPDF',
+            'openInIbooks',
+            'postToFacebook',
+            'postToTwitter',
+            'saveToCameraRoll',
+            'sharePlay',
+          ],
+        },
+      );
     } catch (e) {}
   };
 
@@ -427,7 +453,6 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
     currencyAbbreviation,
     chain,
     network,
-    hideBalance,
     pendingTxps,
   } = uiFormattedWallet;
 
@@ -445,6 +470,8 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
   const [errorLoadingTxs, setErrorLoadingTxs] = useState<boolean>();
   const [needActionPendingTxps, setNeedActionPendingTxps] = useState<any[]>([]);
   const [needActionUnsentTxps, setNeedActionUnsentTxps] = useState<any[]>([]);
+  const [onEndReachedCalledDuringLoading, setOnEndReachedCalledDuringLoading] =
+    useState<boolean>(true);
 
   const setNeedActionTxps = (pendingTxps: TransactionProposal[]) => {
     const txpsPending: TransactionProposal[] = [];
@@ -454,7 +481,6 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
       currencyAbbreviation,
       chain,
       [],
-      {},
     );
     formattedPendingTxps.forEach((txp: any) => {
       const action: any = _.find(txp.actions, {
@@ -483,10 +509,8 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
       return;
     }
     try {
-      batch(() => {
-        setIsLoading(!refresh);
-        setErrorLoadingTxs(false);
-      });
+      setIsLoading(!refresh);
+      setErrorLoadingTxs(false);
 
       const [transactionHistory] = await Promise.all([
         dispatch(
@@ -500,22 +524,19 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
         ),
       ]);
 
-      batch(() => {
-        if (transactionHistory) {
-          let {transactions: _history, loadMore: _loadMore} =
-            transactionHistory;
+      if (transactionHistory) {
+        let {transactions: _history, loadMore: _loadMore} = transactionHistory;
 
-          if (_history?.length) {
-            setHistory(_history);
-            const grouped = GroupTransactionHistory(_history);
-            setGroupedHistory(grouped);
-          }
-
-          setLoadMore(_loadMore);
+        if (_history?.length) {
+          setHistory(_history);
+          const grouped = GroupTransactionHistory(_history);
+          setGroupedHistory(grouped);
         }
 
-        setIsLoading(false);
-      });
+        setLoadMore(_loadMore);
+      }
+
+      setIsLoading(false);
     } catch (e) {
       setLoadMore(false);
       setIsLoading(false);
@@ -616,7 +637,9 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
           createWalletAddress({wallet: fullWalletObj, newAddress: false}),
         );
 
-        tx = await buildBtcSpeedupTx(fullWalletObj, transaction, address);
+        tx = await dispatch(
+          buildBtcSpeedupTx(fullWalletObj, transaction, address),
+        );
 
         dispatch(
           showBottomNotificationModal({
@@ -847,6 +870,16 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
     [],
   );
 
+  const getBillPayIcon = (
+    billPayAccounts: BillPayAccount[],
+    merchantId: string,
+  ): string => {
+    const account = (billPayAccounts || []).find(
+      acct => acct[acct.type].merchantId === merchantId,
+    );
+    return account ? account[account.type].merchantIcon : '';
+  };
+
   const renderTransaction = useCallback(({item}) => {
     return (
       <TransactionRow
@@ -858,13 +891,17 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
               badge={<SentBadgeSvg />}
             />
           ) : (
-            item.uiIcon
+            TransactionIcons[item.uiIcon]
           )
         }
-        iconURI={item.uiIconURI}
+        iconURI={
+          getBillPayIcon(accounts, item.uiIconURI) ||
+          getGiftCardIcons(supportedCardMap)[item.uiIconURI]
+        }
         description={item.uiDescription}
         time={item.uiTime}
         value={item.uiValue}
+        RBFInfo={{isRBF: item.isRBF, isReceived: IsReceived(item.action)}}
         onPressTransaction={() => onPressTransaction(item)}
       />
     );
@@ -873,11 +910,16 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
   const renderTxp = useCallback(({item}) => {
     return (
       <TransactionProposalRow
-        icon={item.uiIcon}
+        icon={TransactionIcons[item.uiIcon]}
         creator={item.uiCreator}
         time={item.uiTime}
         value={item.uiValue}
+        message={item.message}
         onPressTransaction={() => onPressTxp(item)}
+        recipientCount={item.recipientCount}
+        toAddress={item.toAddress}
+        chain={item.chain}
+        contactList={contactList}
       />
     );
   }, []);
@@ -913,10 +955,10 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
                 <BalanceContainer>
                   <TouchableOpacity
                     onLongPress={() => {
-                      dispatch(toggleHideBalance({wallet: fullWalletObj}));
+                      dispatch(toggleHideAllBalances());
                     }}>
                     <Row>
-                      {!hideBalance ? (
+                      {!hideAllBalances ? (
                         <Balance scale={shouldScale(cryptoBalance)}>
                           {cryptoBalance} {currencyAbbreviation}
                         </Balance>
@@ -925,12 +967,12 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
                       )}
                     </Row>
                     <Row>
-                      {showFiatBalance && !hideBalance && (
+                      {showFiatBalance && !hideAllBalances && (
                         <Paragraph>{fiatBalance}</Paragraph>
                       )}
                     </Row>
                   </TouchableOpacity>
-                  {!hideBalance && showBalanceDetailsButton() && (
+                  {!hideAllBalances && showBalanceDetailsButton() && (
                     <TouchableRow
                       onPress={() => setShowBalanceDetailsModal(true)}>
                       <TimerSvg
@@ -992,16 +1034,19 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
                 {fullWalletObj ? (
                   <LinkingButtons
                     buy={{
-                      hide: !isCoinSupportedToBuy(
-                        fullWalletObj.currencyAbbreviation,
-                        fullWalletObj.chain,
-                        locationData?.countryShortCode || 'US',
-                      ),
+                      hide:
+                        fullWalletObj.network === 'testnet' ||
+                        !isCoinSupportedToBuy(
+                          fullWalletObj.currencyAbbreviation,
+                          fullWalletObj.chain,
+                          locationData?.countryShortCode || 'US',
+                        ),
                       cta: () => {
                         dispatch(
                           Analytics.track('Clicked Buy Crypto', {
                             context: 'WalletDetails',
                             coin: fullWalletObj.currencyAbbreviation,
+                            chain: fullWalletObj.chain || '',
                           }),
                         );
                         navigation.navigate('Wallet', {
@@ -1033,6 +1078,7 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
                           Analytics.track('Clicked Swap Crypto', {
                             context: 'WalletDetails',
                             coin: fullWalletObj.currencyAbbreviation,
+                            chain: fullWalletObj.chain || '',
                           }),
                         );
                         navigation.navigate('SwapCrypto', {
@@ -1109,7 +1155,8 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
               ) : null}
 
               {Number(cryptoLockedBalance) > 0 ? (
-                <LockedBalanceContainer>
+                <LockedBalanceContainer
+                  onPress={() => setShowBalanceDetailsModal(true)}>
                   <HeadContainer>
                     <Description numberOfLines={1} ellipsizeMode={'tail'}>
                       {t('Total Locked Balance')}
@@ -1147,8 +1194,16 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
         }}
         ItemSeparatorComponent={() => <BorderBottom />}
         ListFooterComponent={listFooterComponent}
-        onEndReached={() => loadHistory()}
+        onEndReached={() => {
+          if (!onEndReachedCalledDuringLoading) {
+            loadHistory();
+            setOnEndReachedCalledDuringLoading(true);
+          }
+        }}
         onEndReachedThreshold={0.5}
+        onMomentumScrollBegin={() => {
+          setOnEndReachedCalledDuringLoading(false);
+        }}
         ListEmptyComponent={listEmptyComponent}
         maxToRenderPerBatch={15}
         getItemLayout={getItemLayout}

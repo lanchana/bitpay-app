@@ -8,6 +8,8 @@ import {
   ModalHeaderRight,
 } from '../styled/BuyCryptoModals';
 import {
+  BuyCryptoExchangeKey,
+  BuyCryptoSupportedExchanges,
   getEnabledPaymentMethods,
   isPaymentMethodSupported,
 } from '../utils/buy-crypto-utils';
@@ -17,8 +19,8 @@ import {BaseText} from '../../../../components/styled/Text';
 import Button from '../../../../components/button/Button';
 import MoonpayLogo from '../../../../components/icons/external-services/moonpay/moonpay-logo';
 import RampLogo from '../../../../components/icons/external-services/ramp/ramp-logo';
+import SardineLogo from '../../../../components/icons/external-services/sardine/sardine-logo';
 import SimplexLogo from '../../../../components/icons/external-services/simplex/simplex-logo';
-import WyreLogo from '../../../../components/icons/external-services/wyre/wyre-logo';
 import {Action, LightBlack, SlateDark, White} from '../../../../styles/colors';
 import {useAppDispatch, useAppSelector} from '../../../../utils/hooks';
 import {useTranslation} from 'react-i18next';
@@ -33,6 +35,7 @@ interface PaymentMethodsModalProps {
   coin?: string;
   chain?: string;
   currency?: string;
+  preSetPartner?: BuyCryptoExchangeKey | undefined;
 }
 
 const PaymentMethodCard = styled.TouchableOpacity`
@@ -88,6 +91,7 @@ const PaymentMethodsModal = ({
   coin,
   currency,
   chain,
+  preSetPartner,
 }: PaymentMethodsModalProps) => {
   const {t} = useTranslation();
   const dispatch = useAppDispatch();
@@ -99,6 +103,7 @@ const PaymentMethodsModal = ({
     coin,
     chain,
     locationData?.countryShortCode || 'US',
+    preSetPartner,
   );
 
   const showOtherPaymentMethodsInfoSheet = (
@@ -127,6 +132,41 @@ const PaymentMethodsModal = ({
         ],
       }),
     );
+  };
+
+  const getPartnerLogo = (
+    exchange: BuyCryptoExchangeKey,
+  ): JSX.Element | null => {
+    switch (exchange) {
+      case 'moonpay':
+        return (
+          <MoonpayLogo
+            key={exchange}
+            iconOnly={true}
+            widthIcon={20}
+            heightIcon={20}
+          />
+        );
+      case 'ramp':
+        return (
+          <RampLogo key={exchange} iconOnly={true} width={30} height={20} />
+        );
+      case 'sardine':
+        return (
+          <SardineLogo key={exchange} iconOnly={true} width={30} height={20} />
+        );
+      case 'simplex':
+        return (
+          <SimplexLogo
+            key={exchange}
+            iconOnly={true}
+            widthIcon={20}
+            heightIcon={20}
+          />
+        );
+      default:
+        return null;
+    }
   };
 
   return (
@@ -194,55 +234,24 @@ const PaymentMethodsModal = ({
                         </PaymentMethodProviderText>
                       </PaymentMethodProvider>
                       <PaymentMethodProvider style={{height: 30}}>
-                        {coin &&
-                        currency &&
-                        chain &&
-                        isPaymentMethodSupported(
-                          'moonpay',
-                          paymentMethod,
-                          coin,
-                          chain,
-                          currency,
-                          locationData?.countryShortCode || 'US',
-                        ) ? (
-                          <MoonpayLogo widthIcon={20} heightIcon={20} />
-                        ) : null}
-                        {coin &&
-                        currency &&
-                        chain &&
-                        isPaymentMethodSupported(
-                          'ramp',
-                          paymentMethod,
-                          coin,
-                          chain,
-                          currency,
-                        ) ? (
-                          <RampLogo width={65} height={15} />
-                        ) : null}
-                        {coin &&
-                        currency &&
-                        chain &&
-                        isPaymentMethodSupported(
-                          'simplex',
-                          paymentMethod,
-                          coin,
-                          chain,
-                          currency,
-                        ) ? (
-                          <SimplexLogo widthIcon={20} heightIcon={20} />
-                        ) : null}
-                        {coin &&
-                        currency &&
-                        chain &&
-                        isPaymentMethodSupported(
-                          'wyre',
-                          paymentMethod,
-                          coin,
-                          chain,
-                          currency,
-                        ) ? (
-                          <WyreLogo width={60} height={15} />
-                        ) : null}
+                        {preSetPartner &&
+                        BuyCryptoSupportedExchanges.includes(preSetPartner)
+                          ? getPartnerLogo(preSetPartner)
+                          : BuyCryptoSupportedExchanges.map(exchange => {
+                              return coin &&
+                                currency &&
+                                chain &&
+                                isPaymentMethodSupported(
+                                  exchange,
+                                  paymentMethod,
+                                  coin,
+                                  chain,
+                                  currency,
+                                  locationData?.countryShortCode || 'US',
+                                )
+                                ? getPartnerLogo(exchange)
+                                : null;
+                            })}
                       </PaymentMethodProvider>
                     </PaymentMethodCheckboxTexts>
                   </PaymentMethodCardContainer>

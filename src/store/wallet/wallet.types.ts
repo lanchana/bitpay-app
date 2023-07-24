@@ -45,11 +45,10 @@ export enum WalletActionTypes {
   UPDATE_WALLET_TX_HISTORY = 'WALLET/UPDATE_WALLET_TX_HISTORY',
   SYNC_WALLETS = 'WALLET/SYNC_WALLETS',
   TOGGLE_HIDE_WALLET = 'WALLET/TOGGLE_HIDE_WALLET',
-  TOGGLE_HIDE_BALANCE = 'WALLET/TOGGLE_HIDE_BALANCE',
-  TOGGLE_HIDE_KEY_BALANCE = 'WALLET/TOGGLE_HIDE_KEY_BALANCE',
   UPDATE_CACHE_FEE_LEVEL = 'WALLET/UPDATE_CACHE_FEE_LEVEL',
   UPDATE_DEFERRED_IMPORT = 'WALLET/UPDATE_DEFERRED_IMPORT',
   CLEAR_DEFERRED_IMPORT = 'WALLET/CLEAR_DEFERRED_IMPORT',
+  EXPECTED_KEY_LENGTH_CHANGE = 'WALLET/EXPECTED_KEY_LENGTH_CHANGE',
 }
 
 interface successWalletStoreInit {
@@ -64,6 +63,7 @@ interface successCreateKey {
   type: typeof WalletActionTypes.SUCCESS_CREATE_KEY;
   payload: {
     key: Key;
+    lengthChange: number;
   };
 }
 
@@ -120,6 +120,7 @@ interface deleteKey {
   type: typeof WalletActionTypes.DELETE_KEY;
   payload: {
     keyId: string;
+    lengthChange: number;
   };
 }
 
@@ -274,23 +275,14 @@ interface toggleHideWallet {
   };
 }
 
-interface toggleHideBalance {
-  type: typeof WalletActionTypes.TOGGLE_HIDE_BALANCE;
-  payload: {
-    wallet: Wallet;
-  };
-}
-
-interface toggleHideKeyBalance {
-  type: typeof WalletActionTypes.TOGGLE_HIDE_KEY_BALANCE;
-  payload: {
-    keyId: string;
-  };
-}
-
 interface updateCacheFeeLevel {
   type: typeof WalletActionTypes.UPDATE_CACHE_FEE_LEVEL;
   payload: CacheFeeLevel;
+}
+
+interface setExpectedKeyLengthChange {
+  type: typeof WalletActionTypes.EXPECTED_KEY_LENGTH_CHANGE;
+  payload: number;
 }
 
 export type WalletActionType =
@@ -329,6 +321,5 @@ export type WalletActionType =
   | updateWalletTxHistory
   | syncWallets
   | toggleHideWallet
-  | toggleHideBalance
-  | toggleHideKeyBalance
-  | updateCacheFeeLevel;
+  | updateCacheFeeLevel
+  | setExpectedKeyLengthChange;

@@ -54,6 +54,7 @@ import {
 } from '../../../store/wallet/utils/decode-uri';
 import {sleep} from '../../../utils/helper-methods';
 import {Analytics} from '../../../store/analytics/analytics.effects';
+import {LogActions} from '../../../store/log';
 
 const ValidDataTypes: string[] = [
   'BitcoinAddress',
@@ -93,7 +94,7 @@ const SendToAddress = () => {
   const placeHolderTextColor = theme.dark ? NeutralSlate : '#6F7782';
   const [searchInput, setSearchInput] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
-  const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
+  const {defaultAltCurrency, hideAllBalances} = useAppSelector(({APP}) => APP);
   const {keys} = useAppSelector(({WALLET}: RootState) => WALLET);
   const {rates} = useAppSelector(({RATE}) => RATE);
   const {
@@ -234,7 +235,8 @@ const SendToAddress = () => {
         ? goToSelectInputsView(newRecipient)
         : addRecipient(newRecipient);
     } catch (err) {
-      console.error(err);
+      const e = err instanceof Error ? err.message : JSON.stringify(err);
+      dispatch(LogActions.error('[SendToWallet] ', e));
     }
   };
 
@@ -284,7 +286,13 @@ const SendToAddress = () => {
                         validateData(data);
                       }
                     } catch (err) {
-                      console.log(err);
+                      const e =
+                        err instanceof Error
+                          ? err.message
+                          : JSON.stringify(err);
+                      dispatch(
+                        LogActions.error('[OpenScanner SendToAddress] ', e),
+                      );
                     }
                   },
                 },
@@ -330,6 +338,7 @@ const SendToAddress = () => {
         <View style={{marginTop: 10}}>
           <KeyWalletsRow
             keyWallets={keyWallets}
+            hideBalance={hideAllBalances}
             onPress={(selectedWallet: KeyWallet) => {
               onSendToWallet(selectedWallet);
             }}

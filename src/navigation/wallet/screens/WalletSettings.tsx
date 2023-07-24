@@ -28,11 +28,11 @@ import {sleep} from '../../../utils/helper-methods';
 import {
   showBottomNotificationModal,
   showDecryptPasswordModal,
+  toggleHideAllBalances,
 } from '../../../store/app/app.actions';
 import {WrongPasswordError} from '../components/ErrorMessages';
 import {useDispatch} from 'react-redux';
 import {
-  toggleHideBalance,
   toggleHideWallet,
   updatePortfolioBalance,
 } from '../../../store/wallet/wallet.actions';
@@ -83,12 +83,12 @@ const WalletSettings = () => {
   const navigation = useNavigation();
 
   const wallets = useAppSelector(({WALLET}) => WALLET.keys[key.id].wallets);
+  const {hideAllBalances} = useAppSelector(({APP}) => APP);
   const wallet = findWalletById(wallets, walletId) as Wallet;
   const {
     walletName,
     credentials: {walletName: credentialsWalletName},
     hideWallet,
-    hideBalance,
   } = wallet;
 
   const dispatch = useDispatch();
@@ -180,13 +180,11 @@ const WalletSettings = () => {
         <Hr />
 
         <SettingView>
-          <WalletSettingsTitle>{t('Hide Balance')}</WalletSettingsTitle>
+          <WalletSettingsTitle>{t('Hide All Balances')}</WalletSettingsTitle>
 
           <ToggleSwitch
-            onChange={() => {
-              dispatch(toggleHideBalance({wallet}));
-            }}
-            isEnabled={!!hideBalance}
+            onChange={value => dispatch(toggleHideAllBalances(value))}
+            isEnabled={!!hideAllBalances}
           />
         </SettingView>
 
@@ -236,51 +234,69 @@ const WalletSettings = () => {
           <Hr />
 
           {!key.isReadOnly ? (
-            <Setting
-              activeOpacity={ActiveOpacity}
-              onPress={() => {
-                haptic('impactLight');
-                const {
-                  compliantDerivation,
-                  fingerPrint,
-                  id,
-                  use0forBCH,
-                  use44forMultisig,
-                } = key.methods!;
-                const _keyObj = {
-                  compliantDerivation,
-                  fingerPrint,
-                  id,
-                  use0forBCH,
-                  use44forMultisig,
-                };
-                if (key.methods!.isPrivKeyEncrypted()) {
-                  dispatch(
-                    showDecryptPasswordModal(
-                      buildEncryptModalConfig(async decryptedKey => {
-                        navigation.navigate('Wallet', {
-                          screen: 'ExportWallet',
-                          params: {
-                            wallet,
-                            keyObj: {...decryptedKey, ..._keyObj},
-                          },
-                        });
-                      }),
-                    ),
-                  );
-                } else {
-                  navigation.navigate('Wallet', {
-                    screen: 'ExportWallet',
-                    params: {
-                      wallet,
-                      keyObj: {...key.methods!.get(), ..._keyObj},
-                    },
-                  });
-                }
-              }}>
-              <WalletSettingsTitle>{t('Export Wallet')}</WalletSettingsTitle>
-            </Setting>
+            <>
+              <Setting
+                activeOpacity={ActiveOpacity}
+                onPress={() => {
+                  haptic('impactLight');
+                  const {
+                    compliantDerivation,
+                    fingerPrint,
+                    id,
+                    use0forBCH,
+                    use44forMultisig,
+                  } = key.methods!;
+                  const _keyObj = {
+                    compliantDerivation,
+                    fingerPrint,
+                    id,
+                    use0forBCH,
+                    use44forMultisig,
+                  };
+                  if (key.methods!.isPrivKeyEncrypted()) {
+                    dispatch(
+                      showDecryptPasswordModal(
+                        buildEncryptModalConfig(async decryptedKey => {
+                          navigation.navigate('Wallet', {
+                            screen: 'ExportWallet',
+                            params: {
+                              wallet,
+                              keyObj: {...decryptedKey, ..._keyObj},
+                            },
+                          });
+                        }),
+                      ),
+                    );
+                  } else {
+                    navigation.navigate('Wallet', {
+                      screen: 'ExportWallet',
+                      params: {
+                        wallet,
+                        keyObj: {...key.methods!.get(), ..._keyObj},
+                      },
+                    });
+                  }
+                }}>
+                <WalletSettingsTitle>{t('Export Wallet')}</WalletSettingsTitle>
+              </Setting>
+              <Hr />
+            </>
           ) : null}
+
+          <Setting
+            activeOpacity={ActiveOpacity}
+            onPress={() => {
+              haptic('impactLight');
+              navigation.navigate('Wallet', {
+                screen: 'ClearTransactionHistoryCache',
+                params: {wallet, key},
+              });
+            }}>
+            <WalletSettingsTitle>
+              {t('Clear Transaction History Cache')}
+            </WalletSettingsTitle>
+          </Setting>
+          <Hr />
         </VerticalPadding>
       </ScrollView>
     </WalletSettingsContainer>

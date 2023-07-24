@@ -22,7 +22,10 @@ import {
   View,
 } from 'react-native';
 import {BaseText} from '../../../../../components/styled/Text';
-import {setDefaultAltCurrency} from '../../../../../store/app/app.actions';
+import {
+  dismissOnGoingProcessModal,
+  setDefaultAltCurrency,
+} from '../../../../../store/app/app.actions';
 import {useAppDispatch, useAppSelector} from '../../../../../utils/hooks';
 
 import {useNavigation} from '@react-navigation/native';
@@ -32,10 +35,11 @@ import SearchSvg from '../../../../../../assets/img/search.svg';
 import {FormatKeyBalances} from '../../../../../store/wallet/effects/status/status';
 import {updatePortfolioBalance} from '../../../../../store/wallet/wallet.actions';
 import {getPriceHistory} from '../../../../../store/wallet/effects';
-import {batch} from 'react-redux';
 import {useTranslation} from 'react-i18next';
 import {coinbaseInitialize} from '../../../../../store/coinbase';
 import {Analytics} from '../../../../../store/analytics/analytics.effects';
+import {startOnGoingProcessModal} from '../../../../../store/app/app.effects';
+import {sleep} from '../../../../../utils/helper-methods';
 
 const AltCurrencySettingsContainer = styled.SafeAreaView`
   margin-top: 20px;
@@ -162,21 +166,23 @@ const AltCurrencySettings = () => {
             selected={selected}
             onPress={async () => {
               Keyboard.dismiss();
-              navigation.goBack();
+              dispatch(startOnGoingProcessModal('LOADING'));
+              await sleep(500);
               dispatch(
                 Analytics.track('Saved Display Currency', {
                   currency: item.isoCode,
                 }),
               );
               InteractionManager.runAfterInteractions(() => {
-                batch(() => {
-                  dispatch(setDefaultAltCurrency(item));
-                  dispatch(FormatKeyBalances());
-                  dispatch(updatePortfolioBalance());
-                  dispatch(coinbaseInitialize());
-                  dispatch(getPriceHistory(item.isoCode));
-                });
+                dispatch(setDefaultAltCurrency(item));
+                dispatch(FormatKeyBalances());
+                dispatch(updatePortfolioBalance());
+                dispatch(coinbaseInitialize());
+                dispatch(getPriceHistory(item.isoCode));
               });
+              dispatch(dismissOnGoingProcessModal());
+              await sleep(500);
+              navigation.goBack();
             }}
           />
           {!selected ? <Hr /> : null}

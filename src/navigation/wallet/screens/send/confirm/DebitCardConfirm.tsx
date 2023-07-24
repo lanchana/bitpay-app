@@ -21,6 +21,7 @@ import {
   createPayProTxProposal,
   handleCreateTxProposalError,
   removeTxp,
+  showConfirmAmountInfoSheet,
   startSendPayment,
 } from '../../../../../store/wallet/effects/send/send';
 import {sleep, formatFiatAmount} from '../../../../../utils/helper-methods';
@@ -58,6 +59,7 @@ import {
 import {coinbasePayInvoice} from '../../../../../store/coinbase';
 import {useTranslation} from 'react-i18next';
 import {getTransactionCurrencyForPayInvoice} from '../../../../../store/coinbase/coinbase.effects';
+import {getCurrencyCodeFromCoinAndChain} from '../../../../bitpay-id/utils/bitpay-id-utils';
 
 export interface DebitCardConfirmParamList {
   amount: number;
@@ -106,6 +108,7 @@ const Confirm = () => {
 
   const [walletSelectorVisible, setWalletSelectorVisible] = useState(false);
   const [key, setKey] = useState(keys[_wallet ? _wallet.keyId : '']);
+  const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
   const [wallet, setWallet] = useState(_wallet);
   const [coinbaseAccount, setCoinbaseAccount] =
     useState<CoinbaseAccountProps>();
@@ -119,8 +122,17 @@ const Confirm = () => {
 
   const [resetSwipeButton, setResetSwipeButton] = useState(false);
   const memoizedKeysAndWalletsList = useMemo(
-    () => dispatch(BuildPayProWalletSelectorList({keys, network})),
-    [dispatch, keys, network],
+    () =>
+      dispatch(
+        BuildPayProWalletSelectorList({
+          keys,
+          network,
+          defaultAltCurrencyIsoCode: defaultAltCurrency.isoCode,
+          invoice,
+          skipThreshold: true,
+        }),
+      ),
+    [defaultAltCurrency.isoCode, dispatch, keys, network, invoice],
   );
 
   const reshowWalletSelector = async () => {
@@ -205,7 +217,10 @@ const Confirm = () => {
     try {
       const {invoiceId, invoice: newInvoice} = await createTopUpInvoice({
         walletId: selectedWallet.id,
-        transactionCurrency: selectedWallet.currencyAbbreviation.toUpperCase(),
+        transactionCurrency: getCurrencyCodeFromCoinAndChain(
+          selectedWallet.currencyAbbreviation,
+          selectedWallet.chain,
+        ),
       });
       const baseUrl = BASE_BITPAY_URLS[network];
       const paymentUrl = `${baseUrl}/i/${invoiceId}`;
@@ -316,7 +331,6 @@ const Confirm = () => {
     setResetSwipeButton(true);
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => openKeyWalletSelector(), []);
 
   return (
@@ -385,11 +399,26 @@ const Confirm = () => {
               fiatOnly
               hr
             />
-            <Amount description={t('SubTotal')} amount={subTotal} hr />
+            <Amount
+              description={t('SubTotal')}
+              amount={subTotal}
+              hr
+              showInfoIcon={!!networkCost}
+              infoIconOnPress={() => {
+                dispatch(showConfirmAmountInfoSheet('subtotal'));
+              }}
+            />
 
             <Amount description={t('Miner fee')} amount={fee} fiatOnly hr />
 
-            <Amount description={t('Total')} amount={total} />
+            <Amount
+              description={t('Total')}
+              amount={total}
+              showInfoIcon={!!subTotal}
+              infoIconOnPress={() => {
+                dispatch(showConfirmAmountInfoSheet('total'));
+              }}
+            />
 
             <CardTermsContainer>
               <Smallest>

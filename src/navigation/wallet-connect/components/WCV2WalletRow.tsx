@@ -72,7 +72,6 @@ interface Props {
   onPress: (keyId: string, wallet: WCV2Wallet) => void;
   showCheckbox: boolean;
   topic?: string;
-  peerId?: string;
 }
 
 const WCV2WalletRow = ({
@@ -82,7 +81,6 @@ const WCV2WalletRow = ({
   isLast,
   showCheckbox,
   topic,
-  peerId,
 }: Props) => {
   const dispatch = useAppDispatch();
   const {wallet} = walletObj;
@@ -90,21 +88,19 @@ const WCV2WalletRow = ({
     WALLET_CONNECT_V2.requests.filter(
       request =>
         request.topic === topic &&
-        getAddressFrom(request) === wallet.receiveAddress &&
+        getAddressFrom(request).toLowerCase() ===
+          wallet.receiveAddress?.toLowerCase() &&
         WALLET_CONNECT_SUPPORTED_CHAINS[request.params.chainId]?.chain ===
           wallet.chain,
     ),
   );
+  const {hideAllBalances} = useAppSelector(({APP}) => APP);
 
-  const requestsV1 = useAppSelector(({WALLET_CONNECT}) => {
-    return WALLET_CONNECT.requests.filter(request => request.peerId === peerId);
-  });
   let {
     img,
     badgeImg,
     walletName,
     currencyName,
-    hideBalance,
     balance,
     receiveAddress,
     network,
@@ -135,9 +131,7 @@ const WCV2WalletRow = ({
 
       <CurrencyImageContainer>
         <CurrencyImage img={img} badgeUri={badgeImg} size={45} />
-        {(requests && requests.length) || (requestsV1 && requestsV1.length) ? (
-          <Badge />
-        ) : null}
+        {requests && requests.length ? <Badge /> : null}
       </CurrencyImageContainer>
       <CurrencyColumn>
         <Row>
@@ -149,7 +143,7 @@ const WCV2WalletRow = ({
           </TestBadgeContainer>
         </Row>
         <ListItemSubText style={{marginTop: -4}}>
-          {!hideBalance ? balance?.crypto : '****'}
+          {!hideAllBalances ? balance?.crypto : '****'}
         </ListItemSubText>
       </CurrencyColumn>
       {receiveAddress ? (

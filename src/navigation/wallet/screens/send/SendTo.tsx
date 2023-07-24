@@ -25,7 +25,7 @@ import {
   White,
 } from '../../../../styles/colors';
 import {RouteProp} from '@react-navigation/core';
-import {WalletScreens, WalletStackParamList} from '../../WalletStack';
+import {WalletStackParamList} from '../../WalletStack';
 import {Effect, RootState} from '../../../../store';
 import {
   convertToFiat,
@@ -91,6 +91,7 @@ import {ReceivingAddress} from '../../../../store/bitpay-id/bitpay-id.models';
 import {BitPayIdEffects} from '../../../../store/bitpay-id';
 import {getCurrencyCodeFromCoinAndChain} from '../../../bitpay-id/utils/bitpay-id-utils';
 import {Analytics} from '../../../../store/analytics/analytics.effects';
+import {LogActions} from '../../../../store/log';
 
 const ValidDataTypes: string[] = [
   'BitcoinAddress',
@@ -260,7 +261,7 @@ const SendTo = () => {
   const {rates} = useAppSelector(({RATE}) => RATE);
 
   const allContacts = useAppSelector(({CONTACT}: RootState) => CONTACT.list);
-  const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
+  const {defaultAltCurrency, hideAllBalances} = useAppSelector(({APP}) => APP);
   const theme = useTheme();
   const placeHolderTextColor = theme.dark ? NeutralSlate : '#6F7782';
   const [searchInput, setSearchInput] = useState('');
@@ -432,7 +433,7 @@ const SendTo = () => {
         const invoiceUrl = GetPayProUrl(text);
         dispatch(startOnGoingProcessModal('FETCHING_PAYMENT_OPTIONS'));
 
-        const payProOptions = await GetPayProOptions(invoiceUrl);
+        const payProOptions = await dispatch(GetPayProOptions(invoiceUrl));
         dispatch(dismissOnGoingProcessModal());
         await sleep(500);
         const invoiceCurrency = getCurrencyCodeFromCoinAndChain(
@@ -446,16 +447,21 @@ const SendTo = () => {
         if (selected) {
           const isValid = dispatch(checkCoinAndNetwork(selected, true));
           if (isValid) {
-            navigation.navigate('Wallet', {
-              screen: WalletScreens.PAY_PRO_CONFIRM,
-              params: {
-                payProOptions,
+            await sleep(0);
+            dispatch(
+              incomingData(text, {
                 wallet,
-              },
-            });
+                context,
+                name,
+                email,
+                destinationTag,
+              }),
+            );
           }
         } else {
-          // TODO: handle me
+          dispatch(
+            showBottomNotificationModal(Mismatch(onErrorMessageDismiss)),
+          );
         }
       } catch (err) {
         const formattedErrMsg = BWCErrorMessage(err);
@@ -601,7 +607,11 @@ const SendTo = () => {
                         validateAndNavigateToConfirm(data);
                       }
                     } catch (err) {
-                      console.log(err);
+                      const e =
+                        err instanceof Error
+                          ? err.message
+                          : JSON.stringify(err);
+                      dispatch(LogActions.error('[OpenScanner SendTo] ', e));
                     }
                   },
                 },
@@ -718,6 +728,7 @@ const SendTo = () => {
         <View style={{marginTop: 10}}>
           <KeyWalletsRow
             keyWallets={keyWallets}
+            hideBalance={hideAllBalances}
             onPress={(selectedWallet: KeyWallet) => {
               onSendToWallet(selectedWallet);
             }}

@@ -1,13 +1,14 @@
 import {getMoonpayFiatAmountLimits} from '../../navigation/services/buy-crypto/utils/moonpay-utils';
 import {getRampFiatAmountLimits} from '../../navigation/services/buy-crypto/utils/ramp-utils';
+import {getSardineFiatAmountLimits} from '../../navigation/services/buy-crypto/utils/sardine-utils';
 import {getSimplexFiatAmountLimits} from '../../navigation/services/buy-crypto/utils/simplex-utils';
 import {WalletScreens} from '../../navigation/wallet/WalletStack';
 import {navigationRef} from '../../Root';
-import {getWyreFiatAmountLimits} from '../../navigation/services/buy-crypto/utils/wyre-utils';
 import {Effect} from '../index';
 import {LogActions} from '../log';
 import {BuyCryptoLimits} from './buy-crypto.models';
 import {Analytics} from '../analytics/analytics.effects';
+import {BuyCryptoExchangeKey} from '../../navigation/services/buy-crypto/utils/buy-crypto-utils';
 
 export const calculateAltFiatToUsd =
   (
@@ -76,7 +77,10 @@ export const calculateUsdToAltFiat =
   };
 
 export const getBuyCryptoFiatLimits =
-  (exchange?: string, fiatCurrency?: string): Effect<BuyCryptoLimits> =>
+  (
+    exchange?: BuyCryptoExchangeKey,
+    fiatCurrency?: string,
+  ): Effect<BuyCryptoLimits> =>
   (dispatch, getState) => {
     const state = getState();
     const locationData = state.LOCATION.locationData;
@@ -98,15 +102,13 @@ export const getBuyCryptoFiatLimits =
         baseFiatArray = ['USD', 'EUR'];
         limits = getRampFiatAmountLimits();
         break;
+      case 'sardine':
+        baseFiatArray = ['USD'];
+        limits = getSardineFiatAmountLimits();
+        break;
       case 'simplex':
         baseFiatArray = ['USD'];
         limits = getSimplexFiatAmountLimits();
-        break;
-      case 'wyre':
-        baseFiatArray = ['USD', 'EUR'];
-        limits = getWyreFiatAmountLimits(
-          locationData?.countryShortCode || 'US',
-        );
         break;
       default:
         baseFiatArray = ['USD', 'EUR'];
@@ -114,14 +116,14 @@ export const getBuyCryptoFiatLimits =
           min: Math.min(
             getMoonpayFiatAmountLimits().min,
             getRampFiatAmountLimits().min,
+            getSardineFiatAmountLimits().min,
             getSimplexFiatAmountLimits().min,
-            getWyreFiatAmountLimits(locationData?.countryShortCode || 'US').min,
           ),
           max: Math.max(
             getMoonpayFiatAmountLimits().max,
             getRampFiatAmountLimits().max,
+            getSardineFiatAmountLimits().max,
             getSimplexFiatAmountLimits().max,
-            getWyreFiatAmountLimits(locationData?.countryShortCode || 'US').max,
           ),
         };
         break;

@@ -5,7 +5,6 @@ import {RouteProp} from '@react-navigation/core';
 import {useAppDispatch, useAppSelector} from '../../../utils/hooks';
 import {
   Recipient,
-  TransactionProposal,
   TxDetails,
   Wallet,
 } from '../../../store/wallet/wallet.models';
@@ -37,7 +36,10 @@ import {
   SendingTo,
   SharedDetailRow,
 } from '../../wallet/screens/send/confirm/Shared';
-import {GetFeeOptions} from '../../../store/wallet/effects/fee/fee';
+import {
+  GetFeeOptions,
+  getFeeRatePerKb,
+} from '../../../store/wallet/effects/fee/fee';
 import {Trans, useTranslation} from 'react-i18next';
 import Banner from '../../../components/banner/Banner';
 import {BaseText} from '../../../components/styled/Text';
@@ -47,11 +49,7 @@ import {
   walletConnectV2ApproveCallRequest,
   walletConnectV2RejectCallRequest,
 } from '../../../store/wallet-connect-v2/wallet-connect-v2.effects';
-import {
-  walletConnectApproveCallRequest,
-  walletConnectRejectCallRequest,
-} from '../../../store/wallet-connect/wallet-connect.effects';
-import {startSendPayment} from '../../../store/wallet/effects/send/send';
+import {buildTxDetails} from '../../../store/wallet/effects/send/send';
 
 const HeaderRightContainer = styled.View`
   margin-right: 15px;
@@ -60,14 +58,8 @@ const HeaderRightContainer = styled.View`
 export interface WalletConnectConfirmParamList {
   wallet: Wallet;
   recipient: Recipient;
-  txp: Partial<TransactionProposal>;
-  txDetails: TxDetails;
-  request: any;
-  amount: number;
-  data: string;
   peerName?: string;
-  version: number;
-  peerId?: string;
+  request: any;
 }
 
 const WalletConnectConfirm = () => {
@@ -76,50 +68,40 @@ const WalletConnectConfirm = () => {
   const navigation = useNavigation();
   const route =
     useRoute<RouteProp<WalletConnectStackParamList, 'WalletConnectConfirm'>>();
-  const {
-    wallet,
-    txp,
-    txDetails,
-    request,
-    peerName,
-    version,
-    peerId,
-    recipient,
-  } = route.params;
-  const key = useAppSelector(({WALLET}) => WALLET.keys[wallet.keyId]);
+  const {wallet, request, peerName, recipient} = route.params;
   const [showPaymentSentModal, setShowPaymentSentModal] = useState(false);
   const [resetSwipeButton, setResetSwipeButton] = useState(false);
 
-  const {
-    fee,
-    sendingTo,
-    sendingFrom,
-    subTotal,
-    gasLimit,
-    gasPrice,
-    nonce,
-    total,
-    rateStr,
-  } = txDetails;
+  const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
+  const rates = useAppSelector(({RATE}) => RATE.rates);
+  const [txDetails, setTxDetails] = useState<TxDetails>();
+
+  const _setTxDetails = async () => {
+    const feePerKb = await getFeeRatePerKb({wallet, feeLevel: 'normal'});
+    const _txDetails = dispatch(
+      buildTxDetails({
+        wallet,
+        rates,
+        defaultAltCurrencyIsoCode: defaultAltCurrency.isoCode,
+        recipient,
+        context: 'walletConnect',
+        request,
+        feePerKb,
+      }),
+    );
+    setTxDetails(_txDetails);
+  };
+
+  useEffect(() => {
+    _setTxDetails();
+  }, []);
 
   const feeOptions = GetFeeOptions(wallet.chain);
 
   const approveCallRequest = async () => {
     try {
       dispatch(startOnGoingProcessModal('SENDING_PAYMENT'));
-      if (version === 1) {
-        const broadcastedTx = (await dispatch<any>(
-          startSendPayment({txp, key, wallet, recipient}),
-        )) as any;
-
-        const response = {
-          id: request.payload.id,
-          result: broadcastedTx.txid,
-        };
-        await dispatch(walletConnectApproveCallRequest(peerId!, response));
-      } else {
-        await dispatch(walletConnectV2ApproveCallRequest(request, wallet));
-      }
+      await dispatch(walletConnectV2ApproveCallRequest(request, wallet));
       dispatch(dismissOnGoingProcessModal());
       await sleep(1000);
       dispatch(
@@ -165,17 +147,7 @@ const WalletConnectConfirm = () => {
     haptic('impactLight');
     try {
       dispatch(startOnGoingProcessModal('REJECTING_CALL_REQUEST'));
-      if (version === 1) {
-        const response = {
-          id: request.payload.id,
-          error: {message: t('User rejected call request')},
-        };
-        (await dispatch<any>(
-          walletConnectRejectCallRequest(peerId!, response),
-        )) as any;
-      } else {
-        await dispatch(walletConnectV2RejectCallRequest(request));
-      }
+      await dispatch(walletConnectV2RejectCallRequest(request));
       dispatch(dismissOnGoingProcessModal());
       await sleep(1000);
       navigation.goBack();
@@ -228,27 +200,39 @@ const WalletConnectConfirm = () => {
           }
         />
         <Hr />
-        <SendingTo recipient={sendingTo} hr />
-        <Fee fee={fee} feeOptions={feeOptions} hideFeeOptions={true} hr />
-        {gasPrice !== undefined ? (
+        <SendingTo recipient={txDetails?.sendingTo} hr />
+        <Fee
+          fee={txDetails?.fee}
+          feeOptions={feeOptions}
+          hideFeeOptions={true}
+          hr
+        />
+        {txDetails?.gasPrice !== undefined ? (
           <SharedDetailRow
             description={t('Gas price')}
-            value={gasPrice.toFixed(2) + ' Gwei'}
+            value={txDetails?.gasPrice.toFixed(2) + ' Gwei'}
             hr
           />
         ) : null}
-        {gasLimit !== undefined ? (
-          <SharedDetailRow description={t('Gas limit')} value={gasLimit} hr />
+        {txDetails?.gasLimit !== undefined ? (
+          <SharedDetailRow
+            description={t('Gas limit')}
+            value={txDetails?.gasLimit}
+            hr
+          />
         ) : null}
-        {nonce !== undefined && nonce !== null ? (
-          <SharedDetailRow description={'Nonce'} value={nonce} hr />
+        {txDetails?.nonce !== undefined && txDetails?.nonce !== null ? (
+          <SharedDetailRow description={'Nonce'} value={txDetails?.nonce} hr />
         ) : null}
-        <SendingFrom sender={sendingFrom} hr />
-        {rateStr ? (
-          <ExchangeRate description={t('Exchange Rate')} rateStr={rateStr} />
+        <SendingFrom sender={txDetails?.sendingFrom} hr />
+        {txDetails?.rateStr ? (
+          <ExchangeRate
+            description={t('Exchange Rate')}
+            rateStr={txDetails?.rateStr}
+          />
         ) : null}
-        <Amount description={t('SubTotal')} amount={subTotal} />
-        <Amount description={t('Total')} amount={total} />
+        <Amount description={t('SubTotal')} amount={txDetails?.subTotal} />
+        <Amount description={t('Total')} amount={txDetails?.total} />
       </DetailsList>
       <SwipeButton
         title={t('Slide to approve')}

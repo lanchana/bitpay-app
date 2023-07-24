@@ -3,7 +3,6 @@ import axios from 'axios';
 import {t} from 'i18next';
 import BitPayIdApi from '../../api/bitpay';
 import FastImage from 'react-native-fast-image';
-import {batch} from 'react-redux';
 import CardApi from '../../api/card';
 import {InitialUserData} from '../../api/user/user.types';
 import {sleep} from '../../utils/helper-methods';
@@ -28,6 +27,8 @@ import {
   dismissOnGoingProcessModal,
   showBottomNotificationModal,
 } from '../app/app.actions';
+import AuthApi from '../../api/auth';
+import {isJoinedWaitlist} from './card.actions';
 
 const DoshWhitelist: string[] = [];
 
@@ -86,13 +87,11 @@ export const startCardStoreInit =
       try {
         Dosh.initializeDosh(options).then(() => {
           dispatch(LogActions.info('Successfully initialized Dosh.'));
-
           const {doshToken} = initialData;
           if (!doshToken) {
             dispatch(LogActions.debug('No doshToken provided.'));
             return;
           }
-
           return Dosh.setDoshToken(doshToken);
         });
       } catch (err: any) {
@@ -181,11 +180,9 @@ export const startFetchOverview =
       );
     } catch (err) {
       console.log(`Failed to fetch overview for card ${id}`);
-      batch(() => {
-        dispatch(LogActions.error(`Failed to fetch overview for card ${id}`));
-        dispatch(LogActions.error(JSON.stringify(err)));
-        dispatch(CardActions.failedFetchOverview(id));
-      });
+      dispatch(LogActions.error(`Failed to fetch overview for card ${id}`));
+      dispatch(LogActions.error(JSON.stringify(err)));
+      dispatch(CardActions.failedFetchOverview(id));
     } finally {
       dispatch(dismissOnGoingProcessModal());
     }
@@ -310,15 +307,13 @@ export const startFetchVirtualCardImageUrls =
         dispatch(LogActions.error(JSON.stringify(err)));
       }
     } catch (err) {
-      batch(() => {
-        dispatch(
-          LogActions.error(
-            `Failed to fetch virtual card image URLs for ${ids.join(', ')}`,
-          ),
-        );
-        dispatch(LogActions.error(JSON.stringify(err)));
-        dispatch(CardActions.failedFetchVirtualImageUrls());
-      });
+      dispatch(
+        LogActions.error(
+          `Failed to fetch virtual card image URLs for ${ids.join(', ')}`,
+        ),
+      );
+      dispatch(LogActions.error(JSON.stringify(err)));
+      dispatch(CardActions.failedFetchVirtualImageUrls());
     }
   };
 
@@ -335,13 +330,9 @@ export const START_UPDATE_CARD_LOCK =
 
       dispatch(CardActions.successUpdateCardLock(network, id, isLocked));
     } catch (err) {
-      batch(() => {
-        dispatch(
-          LogActions.error(`Failed to update card lock status for ${id}`),
-        );
-        dispatch(LogActions.error(JSON.stringify(err)));
-        dispatch(CardActions.failedUpdateCardLock(id));
-      });
+      dispatch(LogActions.error(`Failed to update card lock status for ${id}`));
+      dispatch(LogActions.error(JSON.stringify(err)));
+      dispatch(CardActions.failedUpdateCardLock(id));
     }
   };
 
@@ -397,11 +388,9 @@ export const START_UPDATE_CARD_NAME =
 
       dispatch(CardActions.successUpdateCardName(network, id, nickname));
     } catch (err) {
-      batch(() => {
-        dispatch(LogActions.error(`Failed to update card name for ${id}`));
-        dispatch(LogActions.error(JSON.stringify(err)));
-        dispatch(CardActions.failedUpdateCardName(id));
-      });
+      dispatch(LogActions.error(`Failed to update card name for ${id}`));
+      dispatch(LogActions.error(JSON.stringify(err)));
+      dispatch(CardActions.failedUpdateCardName(id));
     }
   };
 
@@ -687,5 +676,32 @@ export const startConfirmPinChange =
       dispatch(CardActions.confirmPinChangeError(id, errMsg));
     } else {
       dispatch(CardActions.confirmPinChangeSuccess(id));
+    }
+  };
+
+export const joinWaitlist =
+  (email: string): Effect =>
+  async (dispatch, getState) => {
+    try {
+      const {APP} = getState();
+      const {network} = APP;
+      const session = await AuthApi.fetchSession(network);
+      const baseUrl = BASE_BITPAY_URLS[network];
+
+      const config = {
+        headers: {
+          'x-csrf-token': session.csrfToken,
+        },
+      };
+      const data = {
+        email,
+        attribute: 'CFSB Card Waitlist',
+      };
+
+      await axios.post(`${baseUrl}/marketing/marketingOptIn`, data, config);
+      dispatch(isJoinedWaitlist(true));
+    } catch (err) {
+      dispatch(LogActions.error(`Error joining waitlist: ${err}`));
+      throw err;
     }
   };

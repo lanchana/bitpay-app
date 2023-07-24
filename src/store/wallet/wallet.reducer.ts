@@ -9,6 +9,7 @@ export const walletReduxPersistBlackList: WalletReduxPersistBlackList = [
   'tokenData',
   'tokenOptions',
   'tokenOptionsByAddress',
+  'expectedKeyLengthChange',
 ];
 
 export type Keys = {
@@ -37,6 +38,7 @@ export interface WalletState {
   queuedTransactions: boolean;
   enableReplaceByFee: boolean;
   initLogs: AddLog[];
+  expectedKeyLengthChange: number;
 }
 
 export const initialState: WalletState = {
@@ -57,7 +59,7 @@ export const initialState: WalletState = {
   balanceCacheKey: {},
   feeLevel: {
     btc: FeeLevels.NORMAL,
-    eth: FeeLevels.NORMAL,
+    eth: FeeLevels.PRIORITY,
     matic: FeeLevels.NORMAL,
   },
   useUnconfirmedFunds: false,
@@ -65,6 +67,7 @@ export const initialState: WalletState = {
   queuedTransactions: false,
   enableReplaceByFee: false,
   initLogs: [], // keep init logs at the end (order is important)
+  expectedKeyLengthChange: 0,
 };
 
 export const walletReducer = (
@@ -72,8 +75,16 @@ export const walletReducer = (
   action: WalletActionType,
 ): WalletState => {
   switch (action.type) {
+    case WalletActionTypes.SUCCESS_CREATE_KEY: {
+      const {key, lengthChange} = action.payload;
+      return {
+        ...state,
+        keys: {...state.keys, [key.id]: key},
+        expectedKeyLengthChange: lengthChange,
+      };
+    }
+
     case WalletActionTypes.SUCCESS_ADD_WALLET:
-    case WalletActionTypes.SUCCESS_CREATE_KEY:
     case WalletActionTypes.SUCCESS_UPDATE_KEY:
     case WalletActionTypes.SUCCESS_IMPORT: {
       const {key} = action.payload;
@@ -226,7 +237,7 @@ export const walletReducer = (
     }
 
     case WalletActionTypes.DELETE_KEY: {
-      const {keyId} = action.payload;
+      const {keyId, lengthChange} = action.payload;
       const keyToUpdate = state.keys[keyId];
       if (!keyToUpdate) {
         return state;
@@ -244,6 +255,7 @@ export const walletReducer = (
           lastDay: state.portfolioBalance.lastDay - balanceToRemove,
           previous: 0,
         },
+        expectedKeyLengthChange: lengthChange,
       };
     }
 
@@ -477,50 +489,6 @@ export const walletReducer = (
       };
     }
 
-    case WalletActionTypes.TOGGLE_HIDE_BALANCE: {
-      const {
-        wallet: {keyId, id},
-      } = action.payload;
-      const keyToUpdate = state.keys[keyId];
-      if (!keyToUpdate) {
-        return state;
-      }
-      keyToUpdate.wallets = keyToUpdate.wallets.map(wallet => {
-        if (wallet.id === id) {
-          wallet.hideBalance = !wallet.hideBalance;
-        }
-        return wallet;
-      });
-
-      return {
-        ...state,
-        keys: {
-          ...state.keys,
-          [keyId]: {
-            ...keyToUpdate,
-          },
-        },
-      };
-    }
-
-    case WalletActionTypes.TOGGLE_HIDE_KEY_BALANCE: {
-      const {keyId} = action.payload;
-      const keyToUpdate = state.keys[keyId];
-      if (!keyToUpdate) {
-        return state;
-      }
-      keyToUpdate.hideKeyBalance = !keyToUpdate.hideKeyBalance;
-      return {
-        ...state,
-        keys: {
-          ...state.keys,
-          [keyId]: {
-            ...keyToUpdate,
-          },
-        },
-      };
-    }
-
     case WalletActionTypes.UPDATE_CACHE_FEE_LEVEL: {
       return {
         ...state,
@@ -530,6 +498,12 @@ export const walletReducer = (
         },
       };
     }
+
+    case WalletActionTypes.EXPECTED_KEY_LENGTH_CHANGE:
+      return {
+        ...state,
+        expectedKeyLengthChange: action.payload,
+      };
 
     default:
       return state;
