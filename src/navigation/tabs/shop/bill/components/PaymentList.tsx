@@ -1,5 +1,4 @@
 import React, {useCallback, useEffect, useState} from 'react';
-import {TouchableOpacity} from 'react-native-gesture-handler';
 import styled from 'styled-components/native';
 import {ActiveOpacity} from '../../../../../components/styled/Containers';
 import NoPaymentsSvg from '../../../../../../assets/img/bills/no-payments.svg';
@@ -11,7 +10,7 @@ import {
 } from '../../../../../store/shop/shop.models';
 import {Paragraph} from '../../../../../components/styled/Text';
 import {LightBlack, Slate30} from '../../../../../styles/colors';
-import {FlatList} from 'react-native';
+import {FlatList, TouchableOpacity} from 'react-native';
 import {useAppDispatch, useAppSelector} from '../../../../../utils/hooks';
 import {APP_NETWORK} from '../../../../../constants/config';
 import {ShopEffects} from '../../../../../store/shop';
@@ -34,16 +33,17 @@ function sortByDescendingDate(a: BillPayPayment, b: BillPayPayment) {
 }
 
 export const PaymentList = ({
+  account,
   accounts,
   variation,
   onPress,
 }: {
+  account?: BillPayAccount;
   accounts: BillPayAccount[];
   variation: 'large' | 'small';
   onPress: (account: BillPayAccount, payment: BillPayment) => void;
 }) => {
   const dispatch = useAppDispatch();
-  const account = accounts.length === 1 ? accounts[0] : undefined;
   const persistedBillPayPayments = useAppSelector(
     ({SHOP}) => SHOP.billPayPayments[APP_NETWORK],
   ) as BillPayPayment[];
@@ -63,8 +63,14 @@ export const PaymentList = ({
     },
     [],
   );
-  const paymentsWithAccounts = allPayments.filter(payment =>
-    accounts.find(acc => acc.id === payment.partnerAccountId),
+  const displayablePayments = allPayments.filter(payment =>
+    account
+      ? account.id === payment.partnerAccountId
+      : accounts.find(acc => acc.id === payment.partnerAccountId) ||
+        (payment.icon &&
+          payment.accountDescription &&
+          payment.merchantName &&
+          payment.accountType),
   );
   const keyExtractor = (item: BillPayment, index: number) =>
     item.partnerPaymentId || `${index}`;
@@ -92,7 +98,7 @@ export const PaymentList = ({
   );
 
   const fetchMore = async () => {
-    const lastPayment = paymentsWithAccounts[paymentsWithAccounts.length - 1];
+    const lastPayment = displayablePayments[displayablePayments.length - 1];
     const lastPaymentDate = lastPayment.createdOn;
     if (noMorePayments) {
       return;
@@ -139,11 +145,11 @@ export const PaymentList = ({
 
   return (
     <>
-      {paymentsWithAccounts.length ? (
+      {displayablePayments.length ? (
         <>
           <FlatList
             contentContainerStyle={{paddingBottom: 200}}
-            data={paymentsWithAccounts}
+            data={displayablePayments}
             keyExtractor={keyExtractor}
             renderItem={renderItem}
             onEndReachedThreshold={0.3}

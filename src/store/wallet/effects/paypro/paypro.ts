@@ -22,6 +22,7 @@ export interface PayProOptions {
   paymentId: string;
   paymentOptions: PayProPaymentOption[];
   payProUrl: string;
+  verified: boolean;
 }
 
 export const GetPayProOptions =
@@ -72,7 +73,9 @@ export const GetPayProDetails =
       payload,
     };
 
-    const payDetails = await bwc.selectPaymentOption(options).catch(async err => {
+    const payDetails = await bwc
+      .selectPaymentOption(options)
+      .catch(async err => {
         let errorStr;
         if (err instanceof Error) {
           errorStr = err.message;
@@ -82,13 +85,15 @@ export const GetPayProDetails =
         dispatch(LogActions.error(`PayPro Details ERR: ${errorStr}`));
         if (attempt <= 3) {
           await new Promise(resolve => setTimeout(resolve, 5000 * attempt));
-          return dispatch(GetPayProDetails({
-            paymentUrl,
-            coin,
-            chain,
-            payload,
-            attempt: ++attempt,
-          }));
+          return dispatch(
+            GetPayProDetails({
+              paymentUrl,
+              coin,
+              chain,
+              payload,
+              attempt: ++attempt,
+            }),
+          );
         } else {
           throw err;
         }

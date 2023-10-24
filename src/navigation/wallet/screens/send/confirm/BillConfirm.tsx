@@ -47,20 +47,24 @@ import {
   BillScreens,
   BillStackParamList,
 } from '../../../../tabs/shop/bill/BillStack';
-import {Image} from 'react-native';
+import {Image, View} from 'react-native';
 import Button from '../../../../../components/button/Button';
 import {StackScreenProps} from '@react-navigation/stack';
 import haptic from '../../../../../components/haptic-feedback/haptic';
 import BillAlert from '../../../../tabs/shop/bill/components/BillAlert';
 import PaymentSent from '../../../components/PaymentSent';
-import {WalletScreens} from '../../../WalletStack';
 import {Analytics} from '../../../../../store/analytics/analytics.effects';
 import {getBillAccountEventParams} from '../../../../tabs/shop/bill/utils';
+import {getCurrencyCodeFromCoinAndChain} from '../../../../bitpay-id/utils/bitpay-id-utils';
 
-export interface BillConfirmParamList {
+export interface BillPaymentRequest {
   amount: number;
   amountType?: string;
   billPayAccount: BillPayAccount;
+}
+
+export interface BillConfirmParamList {
+  billPayments: BillPaymentRequest[];
 }
 
 const Confirm: React.FC<
@@ -71,14 +75,19 @@ const Confirm: React.FC<
   const navigator = useNavigation();
   const route = useRoute<RouteProp<BillStackParamList, 'BillConfirm'>>();
   const {
-    amount,
-    amountType,
-    billPayAccount,
+    billPayments,
     wallet: _wallet,
     recipient: _recipient,
     txDetails: _txDetails,
     txp: _txp,
   } = route.params!;
+
+  const amount = billPayments.reduce(
+    (sum, billPayment) => sum + billPayment.amount,
+    0,
+  );
+  const billPayAccount = billPayments[0].billPayAccount;
+
   const keys = useAppSelector(({WALLET}) => WALLET.keys);
 
   const [walletSelectorVisible, setWalletSelectorVisible] = useState(false);
@@ -97,9 +106,13 @@ const Confirm: React.FC<
   const [resetSwipeButton, setResetSwipeButton] = useState(false);
 
   const baseEventParams = {
-    ...getBillAccountEventParams(billPayAccount),
+    ...(billPayments.length === 1
+      ? getBillAccountEventParams(billPayAccount)
+      : []),
     amount,
-    amountType,
+    amountType:
+      billPayments.length === 1 ? billPayments[0].billPayAccount : 'multiple',
+    numAccounts: billPayments.length,
     ...((wallet || coinbaseAccount) && {
       coin: wallet ? wallet.currencyAbbreviation : coinbaseAccount?.currency,
       walletType: wallet ? 'BitPay Wallet' : 'Coinbase Account',
@@ -171,13 +184,11 @@ const Confirm: React.FC<
     dispatch(startOnGoingProcessModal('FETCHING_PAYMENT_INFO'));
     const invoiceCreationParams = {
       transactionCurrency,
-      payments: [
-        {
-          amount,
-          currency: 'USD',
-          accountId: billPayAccount.id,
-        },
-      ],
+      payments: billPayments.map(payment => ({
+        amount: payment.amount,
+        currency: 'USD',
+        accountId: payment.billPayAccount.id,
+      })),
     };
     return dispatch(
       ShopEffects.startCreateBillPayInvoice(invoiceCreationParams),
@@ -206,11 +217,7 @@ const Confirm: React.FC<
       ),
     );
     try {
-      const {
-        invoice: newInvoice,
-        invoiceId,
-        payments,
-      } = await createBillPayInvoice({
+      const {invoice: newInvoice, payments} = await createBillPayInvoice({
         clientId: selectedCoinbaseAccount.id,
         transactionCurrency,
       });
@@ -253,7 +260,10 @@ const Confirm: React.FC<
         payments,
       } = await createBillPayInvoice({
         clientId: selectedWallet.id,
-        transactionCurrency: selectedWallet.currencyAbbreviation.toUpperCase(),
+        transactionCurrency: getCurrencyCodeFromCoinAndChain(
+          selectedWallet.currencyAbbreviation.toUpperCase(),
+          selectedWallet.chain,
+        ),
       });
       const {totalBillAmount, serviceFee} = payments.reduce(
         (totals, payment) => {
@@ -272,13 +282,19 @@ const Confirm: React.FC<
           paymentUrl,
           invoice: newInvoice,
           invoiceID: invoiceId,
-          message: `${formatFiatAmount(amount, 'USD')} to ${
-            billPayAccount[billPayAccount.type].merchantName
-          } ****${billPayAccount[billPayAccount.type].mask}`,
+          message: billPayments
+            .reduce(
+              (message, {billPayAccount: account, amount: paymentAmount}) =>
+                `${message}${formatFiatAmount(paymentAmount, 'USD')} to ${
+                  account[account.type].merchantName
+                } ****${account[account.type].mask}\n`,
+              '',
+            )
+            .trim(),
           customData: {
-            billPayMerchantIds: [
-              billPayAccount[billPayAccount.type].merchantId,
-            ],
+            billPayMerchantIds: billPayments.map(
+              ({billPayAccount: account}) => account[account.type].merchantId,
+            ),
             service: 'billpay',
           },
         }),
@@ -366,22 +382,20 @@ const Confirm: React.FC<
   };
 
   const request2FA = async () => {
-    navigator.navigate('Wallet', {
-      screen: WalletScreens.PAY_PRO_CONFIRM_TWO_FACTOR,
-      params: {
-        onSubmit: async twoFactorCode => {
-          try {
-            await sendPayment(twoFactorCode);
-            await handlePaymentSuccess();
-          } catch (error: any) {
-            dispatch(dismissOnGoingProcessModal());
-            const invalid2faMessage = CoinbaseErrorMessages.twoFactorInvalid;
-            error?.message?.includes(CoinbaseErrorMessages.twoFactorInvalid)
-              ? showError({defaultErrorMessage: invalid2faMessage})
-              : handlePaymentFailure(error);
-            throw error;
-          }
-        },
+    navigation.navigate(BillScreens.BILL_CONFIRM_TWO_FACTOR, {
+      onSubmit: async twoFactorCode => {
+        try {
+          await sendPayment(twoFactorCode);
+          navigation.dispatch(StackActions.pop());
+          await handlePaymentSuccess();
+        } catch (error: any) {
+          dispatch(dismissOnGoingProcessModal());
+          const invalid2faMessage = CoinbaseErrorMessages.twoFactorInvalid;
+          error?.message?.includes(CoinbaseErrorMessages.twoFactorInvalid)
+            ? showError({defaultErrorMessage: invalid2faMessage})
+            : handlePaymentFailure(error);
+          throw error;
+        }
       },
     });
     await sleep(400);
@@ -399,24 +413,36 @@ const Confirm: React.FC<
           <Header hr>Summary</Header>
           <SendingTo
             recipient={{
-              recipientName: `${billPayAccount[
-                billPayAccount.type
-              ].merchantName.slice(0, 12)} ****${
-                billPayAccount[billPayAccount.type].mask
-              }`,
+              recipientName:
+                billPayments.length === 1
+                  ? `${billPayAccount[billPayAccount.type].merchantName.slice(
+                      0,
+                      12,
+                    )} ****${billPayAccount[billPayAccount.type].mask}`
+                  : '',
               img: () => (
-                <Image
-                  style={{
-                    height: 18,
-                    width: 18,
-                    marginTop: -2,
-                    borderRadius: 10,
-                  }}
-                  resizeMode={'contain'}
-                  source={{
-                    uri: billPayAccount[billPayAccount.type].merchantIcon,
-                  }}
-                />
+                <View style={{flexDirection: 'row'}}>
+                  {billPayments.map(({billPayAccount}, index) => (
+                    <Image
+                      key={index}
+                      style={{
+                        height: 18,
+                        width: 18,
+                        marginTop: -2,
+                        borderRadius: 10,
+                        marginRight: 2,
+                        ...(billPayments.length > 1 && {
+                          marginRight:
+                            index === billPayments.length - 1 ? -5 : -3,
+                          zIndex: billPayments.length - index,
+                        }),
+                      }}
+                      source={{
+                        uri: billPayAccount[billPayAccount.type].merchantIcon,
+                      }}
+                    />
+                  ))}
+                </View>
               ),
             }}
             hr
@@ -450,7 +476,9 @@ const Confirm: React.FC<
             <Amount
               description={'Convenience fee'}
               amount={{
-                fiatAmount: `${formatFiatAmount(convenienceFee, 'USD')}`,
+                fiatAmount: convenienceFee
+                  ? formatFiatAmount(convenienceFee, 'USD')
+                  : t('Waived'),
                 cryptoAmount: '',
               }}
               fiatOnly

@@ -12,7 +12,7 @@ import {Paragraph} from '../../../components/styled/Text';
 import {BWCErrorMessage} from '../../../constants/BWCError';
 import yup from '../../../lib/yup';
 import {showBottomNotificationModal} from '../../../store/app/app.actions';
-import {joinWaitlist} from '../../../store/card/card.effects';
+import {joinWaitlist} from '../../../store/app/app.effects';
 import {sleep} from '../../../utils/helper-methods';
 import {useAppDispatch, useAppSelector, useLogger} from '../../../utils/hooks';
 import {CustomErrorMessage} from '../../wallet/components/ErrorMessages';
@@ -40,7 +40,8 @@ const CardIntroImgContainer = styled.View`
 const TitleText = styled(BaseText)`
   width: ${WIDTH * 1.2}px;
   text-align: center;
-  font-size: 38.4px;
+  font-size: ${WIDTH < 380 ? 32 : 38.4}px;
+  margin-bottom: ${WIDTH < 380 ? 3 : 0}px;
 `;
 
 const IntroHero = () => {
@@ -94,7 +95,9 @@ const CardIntro: React.FC = () => {
     try {
       setButtonState('loading');
       Keyboard.dismiss();
-      await dispatch(joinWaitlist(userEmail || email));
+      await dispatch(
+        joinWaitlist(userEmail || email, 'CFSB Card Waitlist', 'bitpay-card'),
+      );
       await sleep(500);
       setButtonState('success');
     } catch (err) {

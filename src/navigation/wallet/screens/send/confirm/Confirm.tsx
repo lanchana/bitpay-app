@@ -458,7 +458,7 @@ const Confirm = () => {
           {gasLimit !== undefined ? (
             <SharedDetailRow
               description={t('Gas limit')}
-              value={gasLimit}
+              value={gasLimit.toLocaleString()}
               onPress={() => editValue(t('Edit gas limit'), 'gasLimit')}
               hr
             />
@@ -523,11 +523,14 @@ const Confirm = () => {
             height={83}
             chain={chain}
             network={wallet.credentials.network}
+            hr
           />
           <Amount
             description={t('Total')}
             amount={total}
-            height={83}
+            height={
+              IsERCToken(wallet.currencyAbbreviation, wallet.chain) ? 110 : 83
+            }
             chain={chain}
             network={wallet.credentials.network}
             showInfoIcon={!!subTotal}

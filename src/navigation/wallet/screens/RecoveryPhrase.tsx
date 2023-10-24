@@ -1,4 +1,4 @@
-import React, {useLayoutEffect, useRef, useState} from 'react';
+import React, {useLayoutEffect, useMemo, useRef, useState} from 'react';
 import styled from 'styled-components/native';
 import {
   BaseText,
@@ -17,7 +17,7 @@ import {
 } from '../../../components/styled/Containers';
 import * as Progress from 'react-native-progress';
 import {Air, BitPay, ProgressBlue} from '../../../styles/colors';
-import Carousel from 'react-native-snap-carousel';
+import Carousel, {ICarouselInstance} from 'react-native-reanimated-carousel';
 import {useAndroidBackHandler} from 'react-navigation-backhandler';
 import {Platform, TouchableOpacity} from 'react-native';
 import haptic from '../../../components/haptic-feedback/haptic';
@@ -30,6 +30,8 @@ import {StackScreenProps} from '@react-navigation/stack';
 import {useAppSelector} from '../../../utils/hooks';
 import {useTranslation} from 'react-i18next';
 import Back from '../../../components/back/Back';
+import throttle from 'lodash.throttle';
+import {IS_ANDROID} from '../../../constants';
 
 type RecoveryPhraseScreenProps = StackScreenProps<
   WalletStackParamList,
@@ -82,6 +84,14 @@ export const CountText = styled(BaseText)`
   text-align: center;
 `;
 
+const renderItem = ({item: word}: {item: string}) => {
+  return (
+    <WordContainer>
+      <H2>{word}</H2>
+    </WordContainer>
+  );
+};
+
 const RecoveryPhrase: React.FC<RecoveryPhraseScreenProps> = ({route}) => {
   const {t} = useTranslation();
   const navigation = useNavigation();
@@ -93,70 +103,90 @@ const RecoveryPhrase: React.FC<RecoveryPhraseScreenProps> = ({route}) => {
   const {words, context, key} = params;
 
   useAndroidBackHandler(() => true);
-  const ref = useRef<Carousel<string>>(null);
+  const ref = useRef<ICarouselInstance>(null);
   const [activeSlideIndex, setActiveSlideIndex] = useState(0);
+
+  const onPressHeaderBack = () => {
+    if (!ref.current || ref.current.getCurrentIndex() === 0) {
+      navigation.goBack();
+    } else {
+      ref.current?.prev();
+    }
+  };
+  const onPressHeaderBackRef = useRef(onPressHeaderBack);
+  onPressHeaderBackRef.current = onPressHeaderBack;
+
+  const onPressHeaderCancel = () => {
+    haptic('impactLight');
+
+    if (context === 'settings') {
+      navigation.goBack();
+      return;
+    }
+
+    dispatch(
+      showBottomNotificationModal({
+        type: 'warning',
+        title: t("Don't risk losing your money"),
+        message: t(
+          'Your recovery key is composed of 12 randomly selected words. Take a couple of minutes to carefully write down each word in the order they appear.',
+        ),
+        enableBackdropDismiss: true,
+        actions: [
+          {
+            text: t("I'M SURE"),
+            action: () =>
+              backupRedirect({
+                context,
+                navigation,
+                walletTermsAccepted,
+                key,
+              }),
+            primary: true,
+          },
+        ],
+      }),
+    );
+  };
+  const onPressHeaderCancelRef = useRef(onPressHeaderCancel);
+  onPressHeaderCancelRef.current = onPressHeaderCancel;
+
+  const headerTitle = useMemo(() => {
+    return () => <HeaderTitle>{t('Recovery Phrase')}</HeaderTitle>;
+  }, [t]);
+
+  const headerLeft = useMemo(() => {
+    return () => (
+      <TouchableOpacity
+        style={{marginLeft: IS_ANDROID ? 10 : 0}}
+        activeOpacity={ActiveOpacity}
+        onPress={onPressHeaderBackRef.current}>
+        <Back opacity={1} />
+      </TouchableOpacity>
+    );
+  }, []);
+
+  const headerRight = useMemo(() => {
+    return () => (
+      <HeaderRightContainer>
+        <Button
+          accessibilityLabel="cancel-button"
+          buttonType={'pill'}
+          onPress={onPressHeaderCancelRef.current}>
+          {t('Cancel')}
+        </Button>
+      </HeaderRightContainer>
+    );
+  }, [t]);
 
   useLayoutEffect(() => {
     navigation.setOptions({
       gestureEnabled: false,
-      headerTitle: () => <HeaderTitle>{t('Recovery Phrase')}</HeaderTitle>,
-      headerLeft: () => (
-        <TouchableOpacity
-          style={{marginLeft: Platform.OS === 'android' ? 10 : 0}}
-          activeOpacity={ActiveOpacity}
-          onPress={() => {
-            if (ref.current?.currentIndex === 0) {
-              navigation.goBack();
-            } else {
-              ref.current?.snapToPrev();
-            }
-          }}>
-          <Back opacity={1} />
-        </TouchableOpacity>
-      ),
-      headerRight: () => (
-        <HeaderRightContainer>
-          <Button
-            accessibilityLabel="cancel-button"
-            buttonType={'pill'}
-            onPress={() => {
-              haptic('impactLight');
-
-              if (context === 'settings') {
-                navigation.goBack();
-                return;
-              }
-
-              dispatch(
-                showBottomNotificationModal({
-                  type: 'warning',
-                  title: t("Don't risk losing your money"),
-                  message: t(
-                    'Your recovery key is composed of 12 randomly selected words. Take a couple of minutes to carefully write down each word in the order they appear.',
-                  ),
-                  enableBackdropDismiss: true,
-                  actions: [
-                    {
-                      text: t("I'M SURE"),
-                      action: () =>
-                        backupRedirect({
-                          context,
-                          navigation,
-                          walletTermsAccepted,
-                          key,
-                        }),
-                      primary: true,
-                    },
-                  ],
-                }),
-              );
-            }}>
-            {t('Cancel')}
-          </Button>
-        </HeaderRightContainer>
-      ),
+      headerTitle,
+      headerLeft,
+      headerRight,
     });
-  });
+  }, [navigation, headerTitle, headerLeft, headerRight]);
 
   const next = () => {
     if (activeSlideIndex === words.length - 1) {
@@ -165,9 +195,17 @@ const RecoveryPhrase: React.FC<RecoveryPhraseScreenProps> = ({route}) => {
         params: {...params, walletTermsAccepted},
       });
     } else {
-      ref.current?.snapToNext();
+      ref.current?.next();
     }
   };
+
+  const throttleOnActiveSlideChange = useMemo(
+    () =>
+      throttle((index: number) => {
+        setActiveSlideIndex(Math.round(index));
+      }, 300),
+    [],
+  );
 
   return (
     <RecoveryPhraseContainer accessibilityLabel="recovery-phrase-view">
@@ -189,28 +227,30 @@ const RecoveryPhrase: React.FC<RecoveryPhraseScreenProps> = ({route}) => {
             <Paragraph>{t('Write down each word.')}</Paragraph>
           </TextAlign>
         </DirectionsContainer>
+
         <Carousel
+          loop={false}
           vertical={false}
-          layout={'stack'}
-          layoutCardOffset={words.length}
-          useExperimentalSnap={true}
+          mode={'horizontal-stack'}
+          modeConfig={{
+            snapDirection: 'left',
+            stackInterval: 25,
+            scaleInterval: 0.08,
+            showLength: 3,
+          }}
+          width={Math.round(WIDTH)}
+          height={Math.round(WIDTH) / 2}
+          autoPlay={false}
           data={words}
-          renderItem={({item: word}: {item: string}) => {
-            return (
-              <WordContainer>
-                <H2>{word}</H2>
-              </WordContainer>
-            );
-          }}
           ref={ref}
-          sliderWidth={WIDTH}
-          itemWidth={Math.round(WIDTH)}
-          onScrollIndexChanged={(index: number) => {
-            setActiveSlideIndex(index);
+          scrollAnimationDuration={1000}
+          enabled={false}
+          onProgressChange={(_, index) => {
+            if (Math.round(index) !== activeSlideIndex) {
+              throttleOnActiveSlideChange(index);
+            }
           }}
-          scrollEnabled={false}
-          // @ts-ignore
-          disableIntervalMomentum={true}
+          renderItem={renderItem}
         />
         <CountTracker>
           <CountText>

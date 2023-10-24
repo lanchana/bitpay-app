@@ -3,10 +3,9 @@ import debounce from 'lodash.debounce';
 import {useTheme} from 'styled-components/native';
 import pickBy from 'lodash.pickby';
 import uniqBy from 'lodash.uniqby';
-import {Platform, View} from 'react-native';
+import {Platform, View, TouchableOpacity} from 'react-native';
 import {useForm, Controller} from 'react-hook-form';
-import {TouchableWithoutFeedback} from 'react-native-gesture-handler';
-import {WIDTH} from '../../../../components/styled/Containers';
+import {ActiveOpacity, WIDTH} from '../../../../components/styled/Containers';
 import ShopCarouselList, {ShopCarouselItem} from './ShopCarouselList';
 import {BaseText, Paragraph} from '../../../../components/styled/Text';
 import GiftCardItem from './GiftCardItem';
@@ -62,6 +61,7 @@ const Curations = ({
             )}
             itemUnderlayColor={underlayColor}
             itemWidthInLastSlide={WIDTH}
+            itemHeight={85}
             maxItemsPerColumn={3}
             screenWidth={WIDTH}
             onItemPress={item => {
@@ -282,13 +282,14 @@ export default ({
           <SectionContainer>
             <SectionHeaderContainer>
               <SectionHeader>{t('All Gift Cards')}</SectionHeader>
-              <TouchableWithoutFeedback
+              <TouchableOpacity
+                activeOpacity={ActiveOpacity}
                 onPress={() => setIsFilterSheetShown(!isFilterSheetShown)}>
                 <SectionHeaderButton>
                   {t('Filter')}
                   {numSelectedCategories ? ` (${numSelectedCategories})` : null}
                 </SectionHeaderButton>
-              </TouchableWithoutFeedback>
+              </TouchableOpacity>
             </SectionHeaderContainer>
           </SectionContainer>
           <SearchResults>

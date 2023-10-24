@@ -98,8 +98,8 @@ android {
         applicationId "com.bitpay.wallet"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 91212105
-        versionName "14.13.0"
+        versionCode 91212171
+        versionName "14.15.1"
         missingDimensionStrategy 'react-native-camera', 'mlkit'
     }
     splits {
@@ -178,18 +178,8 @@ dependencies {
         implementation jscFlavor
     }
 
-    // Dosh
-    implementation('com.dosh:poweredby:2.8.0') {
-      exclude group:'com.squareup.okhttp3', module:'okhttp'
-    }
-
     // AppsFlyer
     implementation project(':react-native-appsflyer')
-    // Dosh SDK requires updated okhttp version
-    // If React Native updates their version, this can be removed
-    implementation "com.squareup.okhttp3:okhttp:4.8.0"
-    implementation "com.squareup.okhttp3:okhttp-urlconnection:4.8.0"
-    implementation 'com.google.android.gms:play-services-tapandpay:18.2.0'
 }
 
 apply from: file("../../node_modules/@react-native-community/cli-platform-android/native_modules.gradle"); applyNativeModulesAppBuildGradle(project)

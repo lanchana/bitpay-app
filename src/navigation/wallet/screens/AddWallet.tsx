@@ -62,7 +62,7 @@ import {
 } from '../../../constants/SupportedCurrencyOptions';
 import SheetModal from '../../../components/modal/base/sheet/SheetModal';
 import WalletRow, {WalletRowProps} from '../../../components/list/WalletRow';
-import {FlatList, Keyboard, View} from 'react-native';
+import {FlatList, Keyboard, View, TouchableOpacity} from 'react-native';
 import {
   getProtocolName,
   keyExtractor,
@@ -90,7 +90,6 @@ import {
   BitpaySupportedCurrencies,
   SUPPORTED_EVM_COINS,
 } from '../../../constants/currencies';
-import {TouchableOpacity} from 'react-native-gesture-handler';
 import InfoSvg from '../../../../assets/img/info.svg';
 import {URL} from '../../../constants';
 import {useTranslation} from 'react-i18next';
@@ -431,7 +430,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
         }
 
         // new wallet might have funds
-        await dispatch(startGetRates({}));
+        await dispatch(startGetRates({force: true}));
         await dispatch(startUpdateAllWalletStatusForKey({key, force: true}));
         await sleep(1000);
         dispatch(updatePortfolioBalance());
@@ -611,7 +610,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
         name: tokenContractInfo.name,
         symbol: tokenContractInfo.symbol,
         decimals: Number(tokenContractInfo.decimals),
-        address: tokenAddress,
+        address: tokenAddress?.toLowerCase(),
       };
       setCurrencyAbbreviation(tokenContractInfo.symbol);
       setCurrencyName(tokenContractInfo.name);

@@ -35,7 +35,7 @@ import {isAxiosError} from '../../utils/axios';
 import {sleep} from '../../utils/helper-methods';
 import {Analytics} from '../analytics/analytics.effects';
 import {BitPayIdEffects} from '../bitpay-id';
-import {CardEffects} from '../card';
+import {CardActions, CardEffects} from '../card';
 import {Card} from '../card/card.models';
 import {coinbaseInitialize} from '../coinbase';
 import {Effect, RootState} from '../index';
@@ -71,6 +71,7 @@ import {DeviceEmitterEvents} from '../../constants/device-emitter-events';
 import {
   APP_DEEPLINK_PREFIX,
   APP_NAME,
+  BASE_BITPAY_URLS,
   DOWNLOAD_BITPAY_URL,
 } from '../../constants/config';
 import {updatePortfolioBalance} from '../wallet/wallet.actions';
@@ -96,6 +97,9 @@ import {moralisInit} from '../moralis/moralis.effects';
 import {walletConnectV2Init} from '../wallet-connect-v2/wallet-connect-v2.effects';
 import {InAppNotificationMessages} from '../../components/modal/in-app-notification/InAppNotification';
 import {SignClientTypes} from '@walletconnect/types';
+import axios from 'axios';
+import AuthApi from '../../api/auth';
+import {ShopActions} from '../shop';
 
 // Subscription groups (Braze)
 const PRODUCTS_UPDATES_GROUP_ID = __DEV__
@@ -222,28 +226,11 @@ export const startAppInit = (): Effect => async (dispatch, getState) => {
     // Update Coinbase
     dispatch(coinbaseInitialize());
 
-    dispatch(showBlur(pinLockActive || biometricLockActive));
-
     dispatch(AppActions.successAppInit());
     DeviceEventEmitter.emit(DeviceEmitterEvents.APP_DATA_INITIALIZED);
-
-    await sleep(500);
     dispatch(LogActions.info('Initialized app successfully.'));
-    dispatch(LogActions.debug(`Pin Lock Active: ${pinLockActive}`));
-    dispatch(LogActions.debug(`Biometric Lock Active: ${biometricLockActive}`));
-    RNBootSplash.hide({fade: true}).then(() => {
-      // avoid splash conflicting with modal in iOS
-      // https://stackoverflow.com/questions/65359539/showing-a-react-native-modal-right-after-app-startup-freezes-the-screen-in-ios
-      if (pinLockActive) {
-        dispatch(AppActions.showPinModal({type: 'check'}));
-      }
-      if (biometricLockActive) {
-        dispatch(AppActions.showBiometricModal({}));
-      }
-
-      dispatch(AppActions.appInitCompleted());
-      DeviceEventEmitter.emit(DeviceEmitterEvents.APP_INIT_COMPLETED);
-    });
+    dispatch(AppActions.appInitCompleted());
+    DeviceEventEmitter.emit(DeviceEmitterEvents.APP_INIT_COMPLETED);
   } catch (err: unknown) {
     let errorStr;
     if (err instanceof Error) {
@@ -473,6 +460,7 @@ export const startOnGoingProcessModal =
       GENERAL_AWAITING: i18n.t("Just a second, we're setting a few things up"),
       CREATING_KEY: i18n.t('Creating Key'),
       LOGGING_IN: i18n.t('Logging In'),
+      LOGGING_OUT: i18n.t('Logging Out'),
       PAIRING: i18n.t('Pairing'),
       CREATING_ACCOUNT: i18n.t('Creating Account'),
       UPDATING_ACCOUNT: i18n.t('Updating Account'),
@@ -499,6 +487,7 @@ export const startOnGoingProcessModal =
       CREATING_TXP: i18n.t('Creating Transaction'),
       SENDING_EMAIL: i18n.t('Sending Email'),
       REDIRECTING: i18n.t('Redirecting'),
+      REMOVING_BILL: i18n.t('Removing Bill'),
       BROADCASTING_TXP: i18n.t('Broadcasting transaction...'),
     };
 
@@ -910,6 +899,7 @@ export const handleBwsEvent =
 export const resetAllSettings = (): Effect => dispatch => {
   dispatch(AppActions.setColorScheme(null));
   dispatch(AppActions.showPortfolioValue(true));
+  dispatch(AppActions.toggleHideAllBalances(false));
   dispatch(
     AppActions.setDefaultAltCurrency({isoCode: 'USD', name: 'US Dollar'}),
   );
@@ -1179,43 +1169,46 @@ export const shareApp = (): Effect<Promise<void>> => async dispatch => {
   }
 };
 
-export const isVersionUpdated = (
-  currentVersion: string,
-  savedVersion: string,
-): boolean => {
-  const verifyTagFormat = (tag: string) => {
-    const regex = /^v?\d+\.\d+\.\d+$/i;
-    return regex.exec(tag);
-  };
-
-  const formatTagNumber = (tag: string) => {
-    const formattedNumber = tag.replace(/^v/i, '').split('.');
-    return {
-      major: +formattedNumber[0],
-      minor: +formattedNumber[1],
-      patch: +formattedNumber[2],
+export const isVersionUpdated =
+  (currentVersion: string, savedVersion: string): Effect<Promise<boolean>> =>
+  async dispatch => {
+    const verifyTagFormat = (tag: string) => {
+      const regex = /^v?\d+\.\d+\.\d+$/i;
+      return regex.exec(tag);
     };
+
+    const formatTagNumber = (tag: string) => {
+      const formattedNumber = tag.replace(/^v/i, '').split('.');
+      return {
+        major: +formattedNumber[0],
+        minor: +formattedNumber[1],
+        patch: +formattedNumber[2],
+      };
+    };
+
+    if (!verifyTagFormat(currentVersion)) {
+      dispatch(
+        LogActions.error(
+          'Cannot verify the format of version tag: ' + currentVersion,
+        ),
+      );
+    }
+    if (!verifyTagFormat(savedVersion)) {
+      dispatch(
+        LogActions.error(
+          'Cannot verify the format of the saved version tag: ' + savedVersion,
+        ),
+      );
+    }
+
+    const current = formatTagNumber(currentVersion);
+    const saved = formatTagNumber(savedVersion);
+    if (saved.major === current.major && saved.minor === current.minor) {
+      return true;
+    }
+
+    return false;
   };
-
-  if (!verifyTagFormat(currentVersion)) {
-    LogActions.error(
-      'Cannot verify the format of version tag: ' + currentVersion,
-    );
-  }
-  if (!verifyTagFormat(savedVersion)) {
-    LogActions.error(
-      'Cannot verify the format of the saved version tag: ' + savedVersion,
-    );
-  }
-
-  const current = formatTagNumber(currentVersion);
-  const saved = formatTagNumber(savedVersion);
-  if (saved.major === current.major && saved.minor === current.minor) {
-    return true;
-  }
-
-  return false;
-};
 
 export const saveUserFeedback =
   (rate: FeedbackRateType, version: string, sent: boolean): Effect<any> =>
@@ -1289,5 +1282,43 @@ export const requestInAppReview =
           `Failed to request in-app review: ${e?.message || JSON.stringify(e)}`,
         ),
       );
+    }
+  };
+
+export const joinWaitlist =
+  (
+    email: string,
+    attribute: string,
+    context: 'bill-pay' | 'bitpay-card',
+  ): Effect =>
+  async (dispatch, getState) => {
+    try {
+      const {APP} = getState();
+      const network = APP.network as Network;
+      const session = await AuthApi.fetchSession(network);
+      const baseUrl = BASE_BITPAY_URLS[network];
+
+      const config = {
+        headers: {
+          'x-csrf-token': session.csrfToken,
+        },
+      };
+      const data = {
+        email,
+        attribute,
+      };
+
+      await axios.post(`${baseUrl}/marketing/marketingOptIn`, data, config);
+      switch (context) {
+        case 'bitpay-card':
+          dispatch(CardActions.isJoinedWaitlist(true));
+          break;
+        case 'bill-pay':
+          dispatch(ShopActions.isJoinedWaitlist(true));
+          break;
+      }
+    } catch (err) {
+      dispatch(LogActions.error(`Error joining waitlist: ${err}`));
+      throw err;
     }
   };

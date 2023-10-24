@@ -68,7 +68,10 @@ import {
 } from '../../../../constants/BiometricError';
 import {Platform} from 'react-native';
 import {Rates} from '../../../rate/rate.models';
-import {getCoinAndChainFromCurrencyCode} from '../../../../navigation/bitpay-id/utils/bitpay-id-utils';
+import {
+  getCoinAndChainFromCurrencyCode,
+  getCurrencyCodeFromCoinAndChain,
+} from '../../../../navigation/bitpay-id/utils/bitpay-id-utils';
 import {navigationRef} from '../../../../Root';
 import {WalletScreens} from '../../../../navigation/wallet/WalletStack';
 import {keyBackupRequired} from '../../../../navigation/tabs/home/components/Crypto';
@@ -354,13 +357,11 @@ export const getInvoiceEffectiveRate =
   (invoice: Invoice, coin: string, chain: string): Effect<number | undefined> =>
   dispatch => {
     const precision = dispatch(GetPrecision(coin, chain));
+    const invoiceCurrency = getCurrencyCodeFromCoinAndChain(coin, chain);
     return (
       precision &&
       invoice.price /
-        (invoice.paymentSubtotals[
-          invoice.buyerProvidedInfo!.selectedTransactionCurrency!
-        ] /
-          precision.unitToSatoshi)
+        (invoice.paymentSubtotals[invoiceCurrency] / precision.unitToSatoshi)
     );
   };
 
@@ -420,16 +421,23 @@ export const buildTxDetails =
       fee = proposal.fee || 0; // proposal fee is zero for coinbase
     }
 
-    const invoiceCurrency =
-      invoice?.buyerProvidedInfo!.selectedTransactionCurrency;
+    const selectedTransactionCurrency =
+      invoice?.buyerProvidedInfo!.selectedTransactionCurrency ||
+      wallet.currencyAbbreviation.toUpperCase();
 
-    if (invoiceCurrency) {
-      amount = invoice.paymentTotals[invoiceCurrency] || 0;
+    const isOffChain = !proposal;
+    if (invoice && selectedTransactionCurrency) {
+      amount = isOffChain
+        ? invoice.paymentSubtotals[selectedTransactionCurrency]
+        : invoice.paymentTotals[selectedTransactionCurrency];
       const coinAndChain = getCoinAndChainFromCurrencyCode(
-        invoiceCurrency.toLowerCase(),
+        selectedTransactionCurrency.toLowerCase(),
       );
       coin = coinAndChain.coin;
       chain = coinAndChain.chain;
+      if (isOffChain) {
+        fee = 0;
+      }
     }
 
     if (!coin || !chain) {
@@ -437,10 +445,16 @@ export const buildTxDetails =
     }
 
     amount = Number(amount); // Support BN (use number instead string only for view)
-    const effectiveRate =
-      (invoiceCurrency &&
-        dispatch(getInvoiceEffectiveRate(invoice, invoiceCurrency, chain))) ||
-      undefined;
+    let effectiveRate;
+    if (
+      invoice &&
+      selectedTransactionCurrency &&
+      defaultAltCurrencyIsoCode === invoice.currency
+    ) {
+      effectiveRate = dispatch(
+        getInvoiceEffectiveRate(invoice, selectedTransactionCurrency, chain),
+      );
+    }
     const opts = {
       effectiveRate,
       defaultAltCurrencyIsoCode,
@@ -450,15 +464,35 @@ export const buildTxDetails =
     };
     const rateStr = getRateStr(opts);
     const networkCost =
-      invoiceCurrency && invoice?.minerFees[invoiceCurrency]?.totalFee;
+      !isOffChain &&
+      selectedTransactionCurrency &&
+      invoice?.minerFees[selectedTransactionCurrency]?.totalFee;
     const isERC20 = IsERCToken(coin, chain);
     const effectiveRateForFee = isERC20 ? undefined : effectiveRate; // always use chain rates for fee values
 
-    if (invoiceCurrency && context === 'paypro') {
-      amount = invoice.paymentTotals[invoiceCurrency];
-    }
     const {type, name, address, email} = recipient || {};
-    const percentageOfTotalAmount = (fee / (amount + fee)) * 100;
+    const feeToFiat = dispatch(
+      toFiat(
+        fee,
+        defaultAltCurrencyIsoCode,
+        chain,
+        chain,
+        rates,
+        effectiveRateForFee,
+      ),
+    );
+    const amountToFiat = dispatch(
+      toFiat(
+        amount,
+        defaultAltCurrencyIsoCode,
+        coin,
+        chain,
+        rates,
+        effectiveRate,
+      ),
+    );
+    const percentageOfTotalAmount =
+      (feeToFiat / (amountToFiat + feeToFiat)) * 100;
     return {
       context,
       currency: coin,
@@ -475,20 +509,8 @@ export const buildTxDetails =
         fee: {
           feeLevel,
           cryptoAmount: dispatch(FormatAmountStr(chain, chain, fee)),
-          fiatAmount: formatFiatAmount(
-            dispatch(
-              toFiat(
-                fee,
-                defaultAltCurrencyIsoCode,
-                chain,
-                chain,
-                rates,
-                effectiveRateForFee,
-              ),
-            ),
-            defaultAltCurrencyIsoCode,
-          ),
-          percentageOfTotalAmountStr: `${percentageOfTotalAmount.toFixed(2)} %`,
+          fiatAmount: formatFiatAmount(feeToFiat, defaultAltCurrencyIsoCode),
+          percentageOfTotalAmountStr: `${percentageOfTotalAmount.toFixed(2)}%`,
           percentageOfTotalAmount,
         },
       }),
@@ -517,47 +539,16 @@ export const buildTxDetails =
       },
       subTotal: {
         cryptoAmount: dispatch(FormatAmountStr(coin, chain, amount)),
-        fiatAmount: formatFiatAmount(
-          dispatch(
-            toFiat(
-              amount,
-              defaultAltCurrencyIsoCode,
-              coin,
-              chain,
-              rates,
-              effectiveRate,
-            ),
-          ),
-          defaultAltCurrencyIsoCode,
-        ),
+        fiatAmount: formatFiatAmount(amountToFiat, defaultAltCurrencyIsoCode),
       },
       total: {
         cryptoAmount: isERC20
-          ? `${dispatch(FormatAmountStr(coin, chain, amount))} + ${dispatch(
+          ? `${dispatch(FormatAmountStr(coin, chain, amount))}\n + ${dispatch(
               FormatAmountStr(chain, chain, fee),
             )}`
           : dispatch(FormatAmountStr(coin, chain, amount + fee)),
         fiatAmount: formatFiatAmount(
-          dispatch(
-            toFiat(
-              amount,
-              defaultAltCurrencyIsoCode,
-              coin,
-              chain,
-              rates,
-              effectiveRate,
-            ),
-          ) +
-            dispatch(
-              toFiat(
-                fee,
-                defaultAltCurrencyIsoCode,
-                chain,
-                chain,
-                rates,
-                effectiveRateForFee,
-              ),
-            ),
+          amountToFiat + feeToFiat,
           defaultAltCurrencyIsoCode,
         ),
       },
@@ -959,6 +950,7 @@ export const publishAndSign =
               }),
             );
           });
+          dispatch(startOnGoingProcessModal('SENDING_PAYMENT'));
         } catch (error) {
           return reject(error);
         }

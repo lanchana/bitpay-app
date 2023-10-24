@@ -1,7 +1,7 @@
 import React from 'react';
-import {Image, View} from 'react-native';
+import {Image, View, TouchableOpacity} from 'react-native';
 import {useTranslation} from 'react-i18next';
-import styled, {useTheme} from 'styled-components/native';
+import styled from 'styled-components/native';
 import {H6, Paragraph} from '../../../../../components/styled/Text';
 import {
   Action,
@@ -12,7 +12,7 @@ import {
   SlateDark,
   White,
 } from '../../../../../styles/colors';
-import {formatFiatAmount} from '../../../../../utils/helper-methods';
+import {formatFiatAmount, sleep} from '../../../../../utils/helper-methods';
 import {BaseText} from '../../../../wallet/components/KeyDropdownOption';
 import BillStatus from './BillStatus';
 import {
@@ -21,14 +21,17 @@ import {
 } from '../../../../../store/shop/shop.models';
 import ChevronDownSvg from '../../../../../../assets/img/bills/chevron-down.svg';
 import ChevronUpSvg from '../../../../../../assets/img/bills/chevron-up.svg';
-import {TouchableOpacity} from 'react-native-gesture-handler';
 import {ActiveOpacity} from '../../../../../components/styled/Containers';
 import {useAppDispatch} from '../../../../../utils/hooks';
 import {AppActions} from '../../../../../store/app';
-import {CustomErrorMessage} from '../../../../wallet/components/ErrorMessages';
 import {Analytics} from '../../../../../store/analytics/analytics.effects';
+import {startOnGoingProcessModal} from '../../../../../store/app/app.effects';
+import {ShopEffects} from '../../../../../store/shop';
+import {dismissOnGoingProcessModal} from '../../../../../store/app/app.actions';
+import {getBillAccountEventParams} from '../utils';
+import {CustomErrorMessage} from '../../../../wallet/components/ErrorMessages';
 
-interface BillItemProps {
+export interface BillItemProps {
   account: BillPayAccount;
   payment?: BillPayment;
   variation: 'small' | 'large' | 'header' | 'pay';
@@ -143,7 +146,18 @@ export default ({
 }: BillItemProps) => {
   const dispatch = useAppDispatch();
   const {t} = useTranslation();
-  const theme = useTheme();
+
+  const baseEventParams = getBillAccountEventParams(account, payment);
+
+  const removeBill = async () => {
+    await sleep(500);
+    dispatch(startOnGoingProcessModal('REMOVING_BILL'));
+    await dispatch(ShopEffects.startHideBillPayAccount(account.id));
+    await dispatch(ShopEffects.startGetBillPayAccounts());
+    dispatch(dismissOnGoingProcessModal());
+    dispatch(Analytics.track('Bill Pay — Removed Bill', baseEventParams));
+  };
+
   return (
     <ItemContainer variation={variation}>
       <AccountBody>
@@ -154,15 +168,17 @@ export default ({
               width: 30,
               marginRight: 10,
               marginTop: -4,
-              borderRadius: theme.dark ? 30 : 0,
+              borderRadius: 30,
             }}
             resizeMode={'contain'}
-            source={{uri: account[account.type].merchantIcon}}
+            source={{uri: payment?.icon || account[account.type].merchantIcon}}
           />
           <View style={{maxWidth: 175}}>
-            <H6 numberOfLines={1}>{account[account.type].merchantName}</H6>
+            <H6 numberOfLines={1}>
+              {payment?.merchantName || account[account.type].merchantName}
+            </H6>
             <AccountType numberOfLines={1}>
-              {account[account.type].description}
+              {payment?.accountDescription || account[account.type].description}
             </AccountType>
           </View>
         </AccountDetailsLeft>
@@ -178,7 +194,7 @@ export default ({
             </>
           ) : (
             <>
-              {account.isPayable || !!payment ? (
+              {!!payment || account?.isPayable ? (
                 <>
                   {variation === 'pay' ? (
                     <PayButton>
@@ -222,14 +238,41 @@ export default ({
                   activeOpacity={ActiveOpacity}
                   onPress={() => {
                     dispatch(
-                      AppActions.showBottomNotificationModal(
-                        CustomErrorMessage({
-                          title: t('Unable to pay bill'),
-                          errMsg: t(
-                            'We are currently unable to process payments for this bill. We are actively working on a solution.',
-                          ),
-                        }),
-                      ),
+                      AppActions.showBottomNotificationModal({
+                        type: 'error',
+                        title: t('Unable to pay bill'),
+                        message: t(
+                          'We are currently unable to process payments for this bill. We are actively working on a solution.',
+                        ),
+                        enableBackdropDismiss: true,
+                        onBackdropDismiss: () => {},
+                        actions: [
+                          {
+                            text: t('OK'),
+                            action: () => {},
+                            primary: true,
+                          },
+                          {
+                            text: t('REMOVE BILL'),
+                            action: () => {
+                              removeBill().catch(async err => {
+                                dispatch(dismissOnGoingProcessModal());
+                                await sleep(500);
+                                dispatch(
+                                  AppActions.showBottomNotificationModal(
+                                    CustomErrorMessage({
+                                      title: t('Could not remove bill'),
+                                      errMsg:
+                                        err?.message ||
+                                        t('Please try again later.'),
+                                    }),
+                                  ),
+                                );
+                              });
+                            },
+                          },
+                        ],
+                      }),
                     );
                     dispatch(
                       Analytics.track(

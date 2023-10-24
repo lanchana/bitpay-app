@@ -155,7 +155,7 @@ const PayBill = ({
             AppActions.showBottomNotificationModal(
               CustomErrorMessage({
                 title: t('Could not remove bill'),
-                errMsg: err.message,
+                errMsg: err?.message || t('Please try again later.'),
               }),
             ),
           );
@@ -221,9 +221,13 @@ const PayBill = ({
 
   const goToConfirmScreen = async (amount: number) => {
     navigation.navigate(BillScreens.BILL_CONFIRM, {
-      amount,
-      amountType: selectedAmount,
-      billPayAccount: account,
+      billPayments: [
+        {
+          amount,
+          amountType: selectedAmount,
+          billPayAccount: account,
+        },
+      ],
     });
   };
 
@@ -383,7 +387,7 @@ const PayBill = ({
             </TouchableOpacity>
             <LineItemSublabel style={{textAlign: 'right', marginTop: 10}}>
               {account[account.type].lastSuccessfulSync
-                ? `Last synced: ${moment(
+                ? `Balance as of ${moment(
                     new Date(account[account.type].lastSuccessfulSync),
                   ).format('l, h:mm a')}`
                 : 'Balance may be out of date'}

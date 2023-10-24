@@ -77,7 +77,7 @@ const Payment = ({
   const [isOptionsSheetVisible, setIsOptionsSheetVisible] = useState(false);
 
   const baseEventParams = {
-    ...getBillAccountEventParams(account),
+    ...getBillAccountEventParams(account, payment),
     amount: payment.amount,
   };
 
@@ -106,7 +106,7 @@ const Payment = ({
     navigation.setOptions({
       headerTransparent: true,
       headerTitle: () => {
-        return <BillAccountPill account={account} />;
+        return <BillAccountPill account={account} payment={payment} />;
       },
       headerRight: () => {
         return (
@@ -151,19 +151,30 @@ const Payment = ({
       </HeroSection>
       <SectionContainer style={{marginTop: 20, flexGrow: 1}}>
         <LineItem>
-          <LineItemLabel>Sent to</LineItemLabel>
-          <BillAccountPill account={account} />
+          <LineItemLabel>{t('Sent to')}</LineItemLabel>
+          <BillAccountPill account={account} payment={payment} />
         </LineItem>
         <LineItem>
-          <LineItemLabel>Convenience fee</LineItemLabel>
+          <LineItemLabel>{t('Convenience fee')}</LineItemLabel>
           <Paragraph>
-            {formatFiatAmount(payment.convenienceFee, 'USD')}
+            {payment.convenienceFee
+              ? formatFiatAmount(payment.convenienceFee, 'USD')
+              : t('Waived')}
           </Paragraph>
         </LineItem>
         <LineItem>
           <LineItemLabel>Status</LineItemLabel>
           <BillStatus account={account} payment={payment} />
         </LineItem>
+        {payment.estimatedCompletionDate ? (
+          <LineItem>
+            <LineItemLabel>{t('Estimated Completion Date')}</LineItemLabel>
+            <Paragraph>
+              {moment(payment.estimatedCompletionDate).format('MM/DD/YY')}
+            </Paragraph>
+          </LineItem>
+        ) : null}
+
         {!payment.status ||
         ['pending', 'processing'].includes(payment.status) ? (
           <AlertContainer>

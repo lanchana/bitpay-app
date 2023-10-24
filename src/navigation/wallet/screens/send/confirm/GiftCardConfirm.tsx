@@ -62,6 +62,7 @@ import {
 } from '../../../../tabs/shop/gift-card/GiftCardStack';
 import {getTransactionCurrencyForPayInvoice} from '../../../../../store/coinbase/coinbase.effects';
 import {Analytics} from '../../../../../store/analytics/analytics.effects';
+import {getCurrencyCodeFromCoinAndChain} from '../../../../bitpay-id/utils/bitpay-id-utils';
 
 export interface GiftCardConfirmParamList {
   amount: number;
@@ -244,7 +245,10 @@ const Confirm = () => {
     try {
       const {invoice: newInvoice, invoiceId} = await createGiftCardInvoice({
         clientId: selectedWallet.id,
-        transactionCurrency: selectedWallet.currencyAbbreviation.toUpperCase(),
+        transactionCurrency: getCurrencyCodeFromCoinAndChain(
+          selectedWallet.currencyAbbreviation.toUpperCase(),
+          selectedWallet.chain,
+        ),
       });
       const baseUrl = BASE_BITPAY_URLS[APP_NETWORK];
       const paymentUrl = `${baseUrl}/i/${invoiceId}`;
@@ -299,9 +303,9 @@ const Confirm = () => {
     const giftCard = await dispatch(
       ShopEffects.startRedeemGiftCard(invoice!.id),
     );
-    await sleep(200);
+    await sleep(500);
     dispatch(dismissOnGoingProcessModal());
-    await sleep(200);
+    await sleep(500);
     if (giftCard.status === 'PENDING') {
       dispatch(ShopEffects.waitForConfirmation(giftCard.invoiceId));
     }

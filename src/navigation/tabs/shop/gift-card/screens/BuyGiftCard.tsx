@@ -1,5 +1,5 @@
 import React, {useEffect, useLayoutEffect, useState} from 'react';
-import {Platform, ScrollView, View} from 'react-native';
+import {Platform, ScrollView, View, TouchableOpacity} from 'react-native';
 import {StackScreenProps} from '@react-navigation/stack';
 import LinearGradient from 'react-native-linear-gradient';
 import Markdown from 'react-native-markdown-display';
@@ -14,6 +14,7 @@ import {
 } from '../../../../../components/styled/Text';
 import styled from 'styled-components/native';
 import {
+  ActiveOpacity,
   CtaContainerAbsolute,
   HEIGHT,
   WIDTH,
@@ -42,7 +43,6 @@ import {CustomErrorMessage} from '../../../../wallet/components/ErrorMessages';
 import {ShopActions} from '../../../../../store/shop';
 import {APP_NETWORK} from '../../../../../constants/config';
 import {useAppSelector} from '../../../../../utils/hooks';
-import {TouchableWithoutFeedback} from 'react-native-gesture-handler';
 import {useTranslation} from 'react-i18next';
 import {Analytics} from '../../../../../store/analytics/analytics.effects';
 
@@ -352,13 +352,15 @@ const BuyGiftCard = ({
                 </SupportedAmounts>
               </DenomSelectionContainer>
             ) : (
-              <TouchableWithoutFeedback onPress={() => buyGiftCard()}>
+              <TouchableOpacity
+                activeOpacity={ActiveOpacity}
+                onPress={() => buyGiftCard()}>
                 <Amount>
                   {formatFiatAmount(0, cardConfig.currency, {
                     currencyDisplay: 'symbol',
                   })}
                 </Amount>
-              </TouchableWithoutFeedback>
+              </TouchableOpacity>
             )}
           </AmountContainer>
         </GradientBox>
