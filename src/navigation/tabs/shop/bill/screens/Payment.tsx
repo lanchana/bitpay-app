@@ -1,7 +1,7 @@
 import React, {useLayoutEffect, useState} from 'react';
-import {StackScreenProps} from '@react-navigation/stack';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {useTranslation} from 'react-i18next';
-import {BillStackParamList} from '../BillStack';
+import {BillGroupParamList} from '../BillGroup';
 import {H5, H7, Paragraph} from '../../../../../components/styled/Text';
 import styled from 'styled-components/native';
 import {BaseText} from '../../../../wallet/components/KeyDropdownOption';
@@ -70,7 +70,7 @@ const LineItemLabel = styled(H7)`
 const Payment = ({
   navigation,
   route,
-}: StackScreenProps<BillStackParamList, 'Payment'>) => {
+}: NativeStackScreenProps<BillGroupParamList, 'Payment'>) => {
   const {t} = useTranslation();
   const dispatch = useAppDispatch();
   const {account, payment} = route.params;
@@ -142,7 +142,7 @@ const Payment = ({
         <AmountDue>{formatFiatAmount(payment.amount, 'USD')}</AmountDue>
         <PaymentDateContainer>
           <PaymentDate>
-            {t('Amount paid on: ')}
+            {t('Amount paid on:') + ' '}
             <Paragraph style={{fontWeight: '500'}}>
               {moment(payment.createdOn).format('MM/DD/YY')}
             </Paragraph>

@@ -25,8 +25,6 @@ import {
   InfoTriangle,
   InfoImageContainer,
 } from '../../../components/styled/Containers';
-import {StackScreenProps} from '@react-navigation/stack';
-import {WalletStackParamList} from '../WalletStack';
 import {Key, Token, Wallet} from '../../../store/wallet/wallet.models';
 import BoxInput from '../../../components/form/BoxInput';
 import Button from '../../../components/button/Button';
@@ -87,21 +85,22 @@ import {
 } from '../../../store/wallet/effects/address/address';
 import {addCustomTokenOption} from '../../../store/wallet/effects/currencies/currencies';
 import {
-  BitpaySupportedCurrencies,
+  BitpaySupportedCoins,
   SUPPORTED_EVM_COINS,
 } from '../../../constants/currencies';
 import InfoSvg from '../../../../assets/img/info.svg';
 import {URL} from '../../../constants';
 import {useTranslation} from 'react-i18next';
-import {BitpayIdScreens} from '../../bitpay-id/BitpayIdStack';
+import {BitpayIdScreens} from '../../bitpay-id/BitpayIdGroup';
 import {IsERCToken} from '../../../store/wallet/utils/currency';
 import {updatePortfolioBalance} from '../../../store/wallet/wallet.actions';
 import {LogActions} from '../../../store/log';
 import CurrencySelectionRow from '../../../components/list/CurrencySelectionRow';
 import {CommonActions} from '@react-navigation/native';
 import {Analytics} from '../../../store/analytics/analytics.effects';
-
-type AddWalletScreenProps = StackScreenProps<WalletStackParamList, 'AddWallet'>;
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
+import {WalletGroupParamList, WalletScreens} from '../WalletGroup';
+import {RootStacks, getNavigationTabName} from '../../../Root';
 
 export type AddWalletParamList = {
   key: Key;
@@ -110,6 +109,7 @@ export type AddWalletParamList = {
   currencyName?: string;
   isToken?: boolean;
   isCustomToken?: boolean;
+  tokenAddress?: string;
 };
 
 const CreateWalletContainer = styled.SafeAreaView`
@@ -196,13 +196,17 @@ const isWithinReceiveSettings = (parent: any): boolean => {
     );
 };
 
-const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
+const AddWallet = ({
+  route,
+  navigation,
+}: NativeStackScreenProps<WalletGroupParamList, WalletScreens.ADD_WALLET>) => {
   const {t} = useTranslation();
   const dispatch = useAppDispatch();
   const {
     currencyAbbreviation: _currencyAbbreviation,
     currencyName: _currencyName,
     chain: _chain,
+    tokenAddress: _tokenAddress,
     key,
     isToken,
     isCustomToken,
@@ -215,9 +219,9 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
   const hideAllBalances = useAppSelector(({APP}) => APP.hideAllBalances);
   const network = useAppSelector(({APP}) => APP.network);
   const rates = useAppSelector(({RATE}) => RATE.rates);
-  const [customTokenAddress, setCustomTokenAddress] = useState<
-    string | undefined
-  >('');
+  const [tokenAddress, setTokenAddress] = useState<string | undefined>(
+    _tokenAddress,
+  );
   const [currencyName, setCurrencyName] = useState(_currencyName);
   const [currencyAbbreviation, setCurrencyAbbreviation] = useState(
     _currencyAbbreviation,
@@ -226,7 +230,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
     _chain || SupportedEvmCurrencyOptions[0].currencyAbbreviation,
   );
   const singleAddressCurrency =
-    BitpaySupportedCurrencies[currencyAbbreviation?.toLowerCase() as string]
+    BitpaySupportedCoins[currencyAbbreviation?.toLowerCase() as string]
       ?.properties?.singleAddress;
   const nativeSegwitCurrency = _currencyAbbreviation
     ? ['btc', 'ltc'].includes(_currencyAbbreviation.toLowerCase())
@@ -332,7 +336,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
       return;
     }
     if (isCustomToken) {
-      setCustomTokenAddress(undefined);
+      setTokenAddress(undefined);
       setCurrencyName(undefined);
     }
     // find all evm wallets for key
@@ -411,6 +415,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
               chain,
               currencyAbbreviation: _currencyAbbreviation,
               isToken: _associatedWallet ? isToken! : false,
+              tokenAddress: tokenAddress,
             },
             options: {
               password,
@@ -468,7 +473,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
             if (
               key?.wallets
                 .find(wallet => wallet.id === token)
-                ?.currencyAbbreviation.toLowerCase() === currency
+                ?.tokenAddress?.toLowerCase() === tokenAddress
             ) {
               dispatch(
                 showBottomNotificationModal({
@@ -498,16 +503,20 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
       if (!withinReceiveSettings) {
         navigation.dispatch(
           CommonActions.reset({
-            index: 1,
+            index: 2,
             routes: [
               {
-                name: 'KeyOverview',
+                name: RootStacks.TABS,
+                params: {screen: getNavigationTabName()},
+              },
+              {
+                name: WalletScreens.KEY_OVERVIEW,
                 params: {
                   id: key.id,
                 },
               },
               {
-                name: 'WalletDetails',
+                name: WalletScreens.WALLET_DETAILS,
                 params: {
                   walletId: wallet.id,
                   key,
@@ -549,8 +558,8 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
         onPress={() => {
           haptic('soft');
           setAssociatedWallet(item);
-          if (isCustomToken && !!customTokenAddress) {
-            setCustomTokenAddress(undefined);
+          if (isCustomToken && !!tokenAddress) {
+            setTokenAddress(undefined);
           }
           setAssociatedWalletModalVisible(false);
         }}
@@ -587,7 +596,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
         return;
       }
 
-      setCustomTokenAddress(tokenAddress);
+      setTokenAddress(tokenAddress);
       const fullWalletObj = key.wallets.find(
         ({id}) => id === associatedWallet?.id,
       )!;
@@ -608,7 +617,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
       const tokenContractInfo = await getTokenContractInfo(fullWalletObj, opts);
       let customToken: Token = {
         name: tokenContractInfo.name,
-        symbol: tokenContractInfo.symbol,
+        symbol: tokenContractInfo.symbol?.toLowerCase(),
         decimals: Number(tokenContractInfo.decimals),
         address: tokenAddress?.toLowerCase(),
       };
@@ -618,7 +627,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
       Keyboard.dismiss();
     } catch (error) {
       Keyboard.dismiss();
-      setCustomTokenAddress(undefined);
+      setTokenAddress(undefined);
       await sleep(200);
       const err = t(
         'Could not find any ERC20 contract attached to the provided address. Recheck the contract address and network of the associated wallet.',
@@ -691,7 +700,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
                   />
                   <AssociateWalletName>
                     {associatedWallet?.walletName ||
-                      `${associatedWallet.currencyAbbreviation.toUpperCase()} Wallet`}
+                      `${associatedWallet.currencyAbbreviation} Wallet`}
                   </AssociateWalletName>
                 </Row>
                 <Icons.DownToggle />
@@ -710,7 +719,7 @@ const AddWallet: React.FC<AddWalletScreenProps> = ({navigation, route}) => {
                 setTokenInfo(text);
               }}
               error={errors.walletName?.message}
-              value={customTokenAddress}
+              value={tokenAddress}
             />
           </View>
         ) : null}

@@ -1,6 +1,6 @@
 import React, {useEffect, useRef, useState} from 'react';
 import {Platform, ScrollView} from 'react-native';
-import {StackScreenProps} from '@react-navigation/stack';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import styled, {useTheme} from 'styled-components/native';
 import {
   useAppDispatch,
@@ -8,7 +8,7 @@ import {
   useLogger,
   useMount,
 } from '../../../../utils/hooks';
-import {BuyCryptoScreens, BuyCryptoStackParamList} from '../BuyCryptoStack';
+import {BuyCryptoScreens, BuyCryptoGroupParamList} from '../BuyCryptoGroup';
 import {PaymentMethodsAvailable} from '../constants/BuyCryptoConstants';
 import PaymentMethodsModal from '../components/PaymentMethodModal';
 import AmountModal from '../../../../components/amount/AmountModal';
@@ -52,7 +52,7 @@ import {useTranslation} from 'react-i18next';
 import {startOnGoingProcessModal} from '../../../../store/app/app.effects';
 import {
   BitpaySupportedCoins,
-  BitpaySupportedCurrencies,
+  BitpaySupportedTokens,
 } from '../../../../constants/currencies';
 import ToWalletSelectorModal, {
   ToWalletSelectorCustomCurrency,
@@ -87,6 +87,10 @@ export type BuyCryptoRootScreenParams =
     }
   | undefined;
 
+const BuyCryptoRootContainer = styled.SafeAreaView`
+  flex: 1;
+`;
+
 const CtaContainer = styled.View`
   margin: 20px 15px;
 `;
@@ -97,15 +101,18 @@ const ArrowContainer = styled.View`
 
 let buyCryptoConfig: BuyCryptoConfig | undefined;
 
-const BuyCryptoRoot: React.VFC<
-  StackScreenProps<BuyCryptoStackParamList, BuyCryptoScreens.ROOT>
-> = ({navigation, route}) => {
+const BuyCryptoRoot = ({
+  route,
+  navigation,
+}: NativeStackScreenProps<BuyCryptoGroupParamList, BuyCryptoScreens.ROOT>) => {
   const {t} = useTranslation();
   const dispatch = useAppDispatch();
   const theme = useTheme();
   const logger = useLogger();
   const allKeys = useAppSelector(({WALLET}: RootState) => WALLET.keys);
-  const tokenData = useAppSelector(({WALLET}: RootState) => WALLET.tokenData);
+  const tokenDataByAddress = useAppSelector(
+    ({WALLET}: RootState) => WALLET.tokenDataByAddress,
+  );
   const locationData = useAppSelector(({LOCATION}) => LOCATION.locationData);
   const network = useAppSelector(({APP}) => APP.network);
   const user = useAppSelector(({BITPAY_ID}) => BITPAY_ID.user[network]);
@@ -527,21 +534,26 @@ const BuyCryptoRoot: React.VFC<
   const checkPaymentMethodRef = useRef(checkPaymentMethod);
   checkPaymentMethodRef.current = checkPaymentMethod;
 
-  const getLogoUri = (coin: string, _chain: string) => {
+  const getLogoUri = (_currencyAbbreviation: string, _chain: string) => {
+    const foundToken = Object.values(tokenDataByAddress).find(
+      token =>
+        token.coin === _currencyAbbreviation.toLowerCase() &&
+        token.chain === _chain,
+    );
     if (
       SupportedCurrencyOptions.find(
         ({currencyAbbreviation, chain}) =>
-          currencyAbbreviation === coin.toLowerCase() &&
+          currencyAbbreviation === _currencyAbbreviation.toLowerCase() &&
           (!chain || chain === _chain),
       )
     ) {
       return SupportedCurrencyOptions.find(
         ({currencyAbbreviation, chain}) =>
-          currencyAbbreviation === coin.toLowerCase() &&
+          currencyAbbreviation === _currencyAbbreviation.toLowerCase() &&
           (!chain || chain === _chain),
       )!.img;
-    } else if (tokenData[getCurrencyAbbreviation(coin, _chain)]?.logoURI) {
-      return tokenData[getCurrencyAbbreviation(coin, _chain)].logoURI;
+    } else if (foundToken?.logoURI) {
+      return foundToken.logoURI;
     } else {
       return undefined;
     }
@@ -650,14 +662,17 @@ const BuyCryptoRoot: React.VFC<
       supportedCoins
         .map((symbol: string) => {
           const {coin, chain} = getCoinAndChainFromCurrencyCode(symbol);
+          const foundToken = Object.values({
+            ...BitpaySupportedTokens,
+            ...tokenDataByAddress,
+          }).find(token => token.coin === coin && token.chain === chain);
           return {
             currencyAbbreviation: coin,
             symbol,
-            name:
-              BitpaySupportedCurrencies[symbol]?.name ||
-              tokenData[symbol]?.name,
+            name: (BitpaySupportedCoins[symbol]?.name || foundToken?.name)!,
             chain,
             logoUri: getLogoUri(coin, chain),
+            tokenAddress: foundToken?.address,
           };
         })
         .filter(currency => !!currency.name);
@@ -676,7 +691,7 @@ const BuyCryptoRoot: React.VFC<
   }, [selectedWallet]);
 
   return (
-    <>
+    <BuyCryptoRootContainer>
       <ScrollView>
         <BuyCryptoItemCard
           onPress={() => {
@@ -913,7 +928,7 @@ const BuyCryptoRoot: React.VFC<
         currency={fiatCurrency}
         preSetPartner={preSetPartner}
       />
-    </>
+    </BuyCryptoRootContainer>
   );
 };
 

@@ -32,7 +32,7 @@ import {
 } from '../../../store/shop/shop.selectors';
 import {APP_NETWORK} from '../../../constants/config';
 import {useAppDispatch, useAppSelector} from '../../../utils/hooks';
-import {StackScreenProps} from '@react-navigation/stack';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {ShopScreens, ShopStackParamList} from './ShopStack';
 import {useTranslation} from 'react-i18next';
 import {
@@ -62,7 +62,7 @@ export type ShopHomeParamList = {
 
 const Tab = createMaterialTopTabNavigator();
 
-const ShopContainer = styled.View`
+const ShopContainer = styled.SafeAreaView`
   flex: 1;
 `;
 
@@ -123,7 +123,7 @@ const getScrollViewHeight = (
 };
 
 const ShopHome: React.FC<
-  StackScreenProps<ShopStackParamList, ShopScreens.HOME>
+  NativeStackScreenProps<ShopStackParamList, ShopScreens.HOME>
 > = ({route}) => {
   const {t} = useTranslation();
   const theme = useTheme();
@@ -208,8 +208,7 @@ const ShopHome: React.FC<
 
   const [activeTab, setActiveTab] = useState(ShopTabs.GIFT_CARDS);
   const [refreshing, setRefreshing] = useState(false);
-  const [initialSyncComplete, setInitialSyncComplete] =
-    useState(false);
+  const [initialSyncComplete, setInitialSyncComplete] = useState(false);
 
   const memoizedGiftCardCatalog = useCallback(
     () => (
@@ -330,16 +329,17 @@ const ShopHome: React.FC<
               marginHorizontal: 3,
               numTabs: 3,
               tabWidth: 111,
+              langAdjustments: true,
             })}
             screenListeners={{
               tabPress: tab => {
                 if (tab.target) {
                   setActiveTab(
                     tab.target.includes(ShopTabs.GIFT_CARDS)
-                      ? t('Gift Cards')
+                      ? ShopTabs.GIFT_CARDS
                       : tab.target.includes(ShopTabs.BILLS)
-                      ? t('Pay Bills')
-                      : t('Shop Online'),
+                      ? ShopTabs.BILLS
+                      : ShopTabs.SHOP_ONLINE,
                   );
                   if (tab.target.includes(ShopTabs.BILLS)) {
                     dispatch(
@@ -352,14 +352,14 @@ const ShopHome: React.FC<
               },
             }}>
             <Tab.Screen
-              name={ShopTabs.GIFT_CARDS}
+              name={t('Gift Cards')}
               component={memoizedGiftCardCatalog}
             />
             <Tab.Screen
-              name={ShopTabs.SHOP_ONLINE}
+              name={t('Shop Online')}
               component={memoizedShopOnline}
             />
-            <Tab.Screen name={ShopTabs.BILLS} component={memoizedBills} />
+            <Tab.Screen name={t('Pay Bills')} component={memoizedBills} />
           </Tab.Navigator>
         </ShopInnerContainer>
       </ScrollView>

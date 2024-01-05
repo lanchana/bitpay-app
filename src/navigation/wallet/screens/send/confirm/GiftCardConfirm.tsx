@@ -42,7 +42,6 @@ import {AppActions} from '../../../../../store/app';
 import {CustomErrorMessage} from '../../../components/ErrorMessages';
 import {APP_NETWORK, BASE_BITPAY_URLS} from '../../../../../constants/config';
 import {URL} from '../../../../../constants';
-import {Terms} from '../../../../tabs/shop/components/styled/ShopTabComponents';
 import {
   CardConfig,
   GiftCardDiscount,
@@ -58,11 +57,12 @@ import {coinbasePayInvoice} from '../../../../../store/coinbase';
 import {useTranslation} from 'react-i18next';
 import {
   GiftCardScreens,
-  GiftCardStackParamList,
-} from '../../../../tabs/shop/gift-card/GiftCardStack';
+  GiftCardGroupParamList,
+} from '../../../../tabs/shop/gift-card/GiftCardGroup';
 import {getTransactionCurrencyForPayInvoice} from '../../../../../store/coinbase/coinbase.effects';
 import {Analytics} from '../../../../../store/analytics/analytics.effects';
 import {getCurrencyCodeFromCoinAndChain} from '../../../../bitpay-id/utils/bitpay-id-utils';
+import GiftCardTerms from '../../../../tabs/shop/components/GiftCardTerms';
 
 export interface GiftCardConfirmParamList {
   amount: number;
@@ -103,7 +103,7 @@ const Confirm = () => {
   const dispatch = useAppDispatch();
   const navigation = useNavigation();
   const route =
-    useRoute<RouteProp<GiftCardStackParamList, 'GiftCardConfirm'>>();
+    useRoute<RouteProp<GiftCardGroupParamList, 'GiftCardConfirm'>>();
   const {
     amount,
     cardConfig,
@@ -224,7 +224,7 @@ const Confirm = () => {
         transactionCurrency,
       });
       const rates = await dispatch(startGetRates({}));
-      const newTxDetails = dispatch(
+      const newTxDetails = await dispatch(
         buildTxDetails({
           invoice: newInvoice,
           wallet: walletRowProps,
@@ -311,12 +311,9 @@ const Confirm = () => {
     }
     navigation.dispatch(StackActions.popToTop());
     navigation.dispatch(StackActions.pop());
-    navigation.navigate('GiftCard', {
-      screen: 'GiftCardDetails',
-      params: {
-        giftCard,
-        cardConfig,
-      },
+    navigation.navigate('GiftCardDetails', {
+      giftCard,
+      cardConfig,
     });
     const purchaseEventName =
       giftCard.status === 'FAILURE'
@@ -373,22 +370,19 @@ const Confirm = () => {
   };
 
   const request2FA = async () => {
-    navigation.navigate('GiftCard', {
-      screen: GiftCardScreens.GIFT_CARD_CONFIRM_TWO_FACTOR,
-      params: {
-        onSubmit: async twoFactorCode => {
-          try {
-            await sendPayment(twoFactorCode);
-            await redeemGiftCardAndNavigateToGiftCardDetails();
-          } catch (error: any) {
-            dispatch(dismissOnGoingProcessModal());
-            const invalid2faMessage = CoinbaseErrorMessages.twoFactorInvalid;
-            error?.message?.includes(CoinbaseErrorMessages.twoFactorInvalid)
-              ? showError({defaultErrorMessage: invalid2faMessage})
-              : handlePaymentFailure(error);
-            throw error;
-          }
-        },
+    navigation.navigate(GiftCardScreens.GIFT_CARD_CONFIRM_TWO_FACTOR, {
+      onSubmit: async twoFactorCode => {
+        try {
+          await sendPayment(twoFactorCode);
+          await redeemGiftCardAndNavigateToGiftCardDetails();
+        } catch (error: any) {
+          dispatch(dismissOnGoingProcessModal());
+          const invalid2faMessage = CoinbaseErrorMessages.twoFactorInvalid;
+          error?.message?.includes(CoinbaseErrorMessages.twoFactorInvalid)
+            ? showError({defaultErrorMessage: invalid2faMessage})
+            : handlePaymentFailure(error);
+          throw error;
+        }
       },
     });
     await sleep(400);
@@ -454,7 +448,7 @@ const Confirm = () => {
               }}
             />
             <Amount description={t('Total')} amount={total} />
-            <Terms>{cardConfig.terms}</Terms>
+            <GiftCardTerms terms={cardConfig.terms} />
           </>
         ) : null}
       </DetailsList>

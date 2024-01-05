@@ -12,7 +12,7 @@ import {
 } from '../../../../components/styled/Containers';
 import {Linking, View} from 'react-native';
 import {RouteProp} from '@react-navigation/core';
-import {WalletStackParamList} from '../../WalletStack';
+import {WalletGroupParamList} from '../../WalletGroup';
 import {SlateDark, White} from '../../../../styles/colors';
 import Clipboard from '@react-native-clipboard/clipboard';
 import Button, {ButtonState} from '../../../../components/button/Button';
@@ -31,6 +31,7 @@ export type AllAddressesParamList = {
   unusedAddresses?: any[];
   currencyAbbreviation: string;
   chain: string;
+  tokenAddress: string | undefined;
 };
 
 const AddressesContainer = styled.SafeAreaView`
@@ -74,8 +75,9 @@ const AllAddresses = () => {
       usedAddresses,
       unusedAddresses,
       chain,
+      tokenAddress,
     },
-  } = useRoute<RouteProp<WalletStackParamList, 'AllAddresses'>>();
+  } = useRoute<RouteProp<WalletGroupParamList, 'AllAddresses'>>();
 
   const navigation = useNavigation();
   const dispatch = useAppDispatch();
@@ -176,7 +178,12 @@ const AllAddresses = () => {
 
                     <H7>
                       {dispatch(
-                        FormatAmountStr(currencyAbbreviation, chain, amount),
+                        FormatAmountStr(
+                          currencyAbbreviation,
+                          chain,
+                          tokenAddress,
+                          amount,
+                        ),
                       )}
                     </H7>
                   </SettingView>

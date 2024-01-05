@@ -50,7 +50,7 @@ import {WALLET_CONNECT_SUPPORTED_CHAINS} from '../../../constants/WalletConnectV
 import {BottomNotificationConfig} from '../../../components/modal/bottom-notification/BottomNotification';
 import {CustomErrorMessage} from '../../wallet/components/ErrorMessages';
 import {BWCErrorMessage} from '../../../constants/BWCError';
-import {WalletConnectHeader} from '../WalletConnectStack';
+import {WalletConnectHeader} from '../WalletConnectGroup';
 import TrashIcon from '../../../../assets/img/wallet-connect/trash-icon.svg';
 import {InAppNotificationContextType} from '../../../store/app/app.models';
 
@@ -105,14 +105,19 @@ const WalletConnectHome = () => {
   );
   const requestsV2 = useAppSelector(({WALLET_CONNECT_V2}) =>
     WALLET_CONNECT_V2.requests
-      .filter(
-        request =>
+      .filter(request => {
+        const addressFrom = getAddressFrom(request)?.toLowerCase();
+        const filterWithAddress = addressFrom
+          ? addressFrom === wallet.receiveAddress?.toLowerCase()
+          : true; // if address exist in request check if it matches with connected wallets addresses
+        const walletConnectChain =
+          WALLET_CONNECT_SUPPORTED_CHAINS[request?.params.chainId]?.chain;
+        return (
           request.topic === topic &&
-          getAddressFrom(request).toLowerCase() ===
-            wallet.receiveAddress?.toLowerCase() &&
-          WALLET_CONNECT_SUPPORTED_CHAINS[request.params.chainId].chain ===
-            wallet.chain,
-      )
+          filterWithAddress &&
+          walletConnectChain === wallet.chain
+        );
+      })
       .reverse(),
   );
 
@@ -120,7 +125,7 @@ const WalletConnectHome = () => {
   const {name: peerName, icons, url: peerUrl} = peer?.metadata || {};
   const peerIcon = icons && icons[0];
 
-  const {chain, currencyAbbreviation, receiveAddress} = wallet;
+  const {chain, currencyAbbreviation, receiveAddress, tokenAddress} = wallet;
   const showErrorMessage = useCallback(
     async (msg: BottomNotificationConfig) => {
       await sleep(500);
@@ -135,7 +140,9 @@ const WalletConnectHome = () => {
       showBottomNotificationModal({
         type: 'question',
         title: t('Confirm delete'),
-        message: t('Are you sure you want to delete this connection?'),
+        message: t(
+          'Are you sure you want to delete this account from the connection?',
+        ),
         enableBackdropDismiss: true,
         actions: [
           {
@@ -186,7 +193,6 @@ const WalletConnectHome = () => {
       headerRight: () => {
         return (
           <ItemNoteTouchableContainer
-            style={{marginRight: 12}}
             onPress={() => {
               disconnectAccount();
             }}>
@@ -209,14 +215,11 @@ const WalletConnectHome = () => {
         address: toAddress,
       };
 
-      navigation.navigate('WalletConnect', {
-        screen: 'WalletConnectConfirm',
-        params: {
-          wallet: _wallet || wallet,
-          recipient,
-          request,
-          peerName,
-        },
+      navigation.navigate('WalletConnectConfirm', {
+        wallet: _wallet || wallet,
+        recipient,
+        request,
+        peerName,
       });
     } catch (error: any) {
       await showErrorMessage(
@@ -243,14 +246,11 @@ const WalletConnectHome = () => {
   const handleRequestMethod = (request: WCV2RequestType) => {
     const {method} = request.params.request;
     method !== 'eth_sendTransaction' && method !== 'eth_signTransaction'
-      ? navigation.navigate('WalletConnect', {
-          screen: 'WalletConnectRequestDetails',
-          params: {
-            request,
-            wallet,
-            peerName,
-            topic,
-          },
+      ? navigation.navigate('WalletConnectRequestDetails', {
+          request,
+          wallet,
+          peerName,
+          topic,
         })
       : goToConfirmView(request);
   };
@@ -279,71 +279,75 @@ const WalletConnectHome = () => {
   }, [accountDisconnected]);
 
   useEffect(() => {
-    if (context && ['notification'].includes(context)) {
+    if (context && ['notification'].includes(context) && requestsV2[0]) {
       handleRequestMethod(requestsV2[0]);
     }
   }, [context]);
 
-  const renderItem = useCallback(({item, index}) => {
-    const {createdOn, chain: _chain} = item;
-    const {value = '0x0'} = item.params.request.params[0];
-    const amountStr = dispatch(
-      FormatAmountStr(
-        _chain || currencyAbbreviation,
-        _chain || chain,
-        parseInt(value, 16),
-      ),
-    );
+  const renderItem = useCallback(
+    ({item, index}: {item: WCV2RequestType; index: number}) => {
+      const {createdOn, chain: _chain} = item;
+      const {value = '0x0'} = item.params.request.params[0];
+      const amountStr = dispatch(
+        FormatAmountStr(
+          _chain || currencyAbbreviation,
+          _chain || chain,
+          tokenAddress,
+          parseInt(value, 16),
+        ),
+      );
 
-    return (
-      <View key={index.toString()}>
-        <ItemTouchableContainer
-          onPress={() => {
-            haptic('impactLight');
-            handleRequestMethod(item);
-          }}>
-          <ItemTitleContainer style={{maxWidth: '40%'}}>
-            {peerIcon && peerName ? (
-              <>
-                <IconContainer>
-                  <FastImage
-                    source={{uri: peerIcon}}
-                    style={{width: 25, height: 25}}
-                  />
-                </IconContainer>
-                <IconLabel numberOfLines={2} ellipsizeMode={'tail'}>
-                  {peerName}
-                </IconLabel>
-              </>
-            ) : null}
-          </ItemTitleContainer>
-          <ItemNoteContainer>
-            <View style={{alignItems: 'flex-end'}}>
-              <IconLabel>{amountStr}</IconLabel>
-              {createdOn &&
-                (WithinPastDay(createdOn) ? (
-                  <Smallest style={{marginRight: 12}}>
-                    {t('Created ', {
-                      date: GetAmTimeAgo(createdOn),
-                    })}
-                  </Smallest>
-                ) : (
-                  <Smallest style={{marginRight: 12}}>
-                    {t('Created on', {
-                      date: GetAmFormatDate(createdOn),
-                    })}
-                  </Smallest>
-                ))}
-            </View>
-            <IconContainer>
-              <AngleRight />
-            </IconContainer>
-          </ItemNoteContainer>
-        </ItemTouchableContainer>
-        <Hr />
-      </View>
-    );
-  }, []);
+      return (
+        <View key={index.toString()}>
+          <ItemTouchableContainer
+            onPress={() => {
+              haptic('impactLight');
+              handleRequestMethod(item);
+            }}>
+            <ItemTitleContainer style={{maxWidth: '40%'}}>
+              {peerIcon && peerName ? (
+                <>
+                  <IconContainer>
+                    <FastImage
+                      source={{uri: peerIcon}}
+                      style={{width: 25, height: 25}}
+                    />
+                  </IconContainer>
+                  <IconLabel numberOfLines={2} ellipsizeMode={'tail'}>
+                    {peerName}
+                  </IconLabel>
+                </>
+              ) : null}
+            </ItemTitleContainer>
+            <ItemNoteContainer>
+              <View style={{alignItems: 'flex-end'}}>
+                <IconLabel>{amountStr}</IconLabel>
+                {createdOn &&
+                  (WithinPastDay(createdOn) ? (
+                    <Smallest style={{marginRight: 12}}>
+                      {t('Created ', {
+                        date: GetAmTimeAgo(createdOn),
+                      })}
+                    </Smallest>
+                  ) : (
+                    <Smallest style={{marginRight: 12}}>
+                      {t('Created on', {
+                        date: GetAmFormatDate(createdOn),
+                      })}
+                    </Smallest>
+                  ))}
+              </View>
+              <IconContainer>
+                <AngleRight />
+              </IconContainer>
+            </ItemNoteContainer>
+          </ItemTouchableContainer>
+          <Hr />
+        </View>
+      );
+    },
+    [],
+  );
 
   return (
     <WalletConnectContainer>

@@ -87,11 +87,8 @@ const BanxaSettings: React.FC = () => {
                     key={pr.order_id}
                     onPress={() => {
                       haptic('impactLight');
-                      navigation.navigate('ExternalServicesSettings', {
-                        screen: 'BanxaDetails',
-                        params: {
-                          paymentRequest: pr,
-                        },
+                      navigation.navigate('BanxaDetails', {
+                        paymentRequest: pr,
                       });
                     }}>
                     <PrRowLeft>
@@ -165,7 +162,7 @@ const BanxaSettings: React.FC = () => {
         </Settings>
       </SettingsContainer>
       <FooterSupport>
-        <SupportTxt>Having problems with Banxa?</SupportTxt>
+        <SupportTxt>{t('Having problems with Banxa?')}</SupportTxt>
         <TouchableOpacity
           onPress={() => {
             haptic('impactLight');

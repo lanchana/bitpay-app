@@ -11,7 +11,7 @@ import {
 } from '../../../store/wallet/wallet.models';
 import {BaseText, H5, H7, HeaderTitle} from '../../../components/styled/Text';
 import {useTranslation} from 'react-i18next';
-import {WalletStackParamList} from '../WalletStack';
+import {WalletGroupParamList} from '../WalletGroup';
 import {
   Column,
   CtaContainer as _CtaContainer,
@@ -102,7 +102,7 @@ const SelectInputs = () => {
   const dispatch = useAppDispatch();
   const navigation = useNavigation();
   const {t} = useTranslation();
-  const route = useRoute<RouteProp<WalletStackParamList, 'SelectInputs'>>();
+  const route = useRoute<RouteProp<WalletGroupParamList, 'SelectInputs'>>();
   const useUnconfirmedFunds = useAppSelector(
     ({WALLET}) => WALLET.useUnconfirmedFunds,
   );
@@ -110,8 +110,10 @@ const SelectInputs = () => {
   const {rates} = useAppSelector(({RATE}) => RATE);
   const [inputs, setInputs] = useState<UtxoWithFiatAmount[]>([]);
   const {wallet, recipient} = route.params;
-  const {currencyAbbreviation, chain, network} = wallet;
-  const precision = dispatch(GetPrecision(currencyAbbreviation, chain));
+  const {currencyAbbreviation, chain, network, tokenAddress} = wallet;
+  const precision = dispatch(
+    GetPrecision(currencyAbbreviation, chain, tokenAddress),
+  );
   const [totalAmount, setTotalAmount] = useState(
     Number(0).toFixed(precision?.unitDecimals),
   );
@@ -152,6 +154,7 @@ const SelectInputs = () => {
                 currencyAbbreviation,
                 chain,
                 rates,
+                tokenAddress,
               ),
             ),
             false,
@@ -188,6 +191,7 @@ const SelectInputs = () => {
               currencyAbbreviation,
               chain,
               rates,
+              tokenAddress,
             ),
           ),
           false,
@@ -248,7 +252,7 @@ const SelectInputs = () => {
       const estimatedFee = await GetMinFee(wallet, 1, selectedInputs.length);
       logger.debug(`Estimated fee: ${estimatedFee}`);
       const formattedestimatedFee = dispatch(
-        SatToUnit(estimatedFee, currencyAbbreviation, chain),
+        SatToUnit(estimatedFee, currencyAbbreviation, chain, tokenAddress),
       );
 
       const amount = Number(totalAmount) - formattedestimatedFee!;
@@ -265,17 +269,14 @@ const SelectInputs = () => {
       )) as any;
       dispatch(dismissOnGoingProcessModal());
       await sleep(500);
-      navigation.navigate('Wallet', {
-        screen: 'Confirm',
-        params: {
-          wallet,
-          recipient,
-          txp,
-          txDetails,
-          amount,
-          inputs,
-          selectInputs: true,
-        },
+      navigation.navigate('Confirm', {
+        wallet,
+        recipient,
+        txp,
+        txDetails,
+        amount,
+        inputs,
+        selectInputs: true,
       });
     } catch (err: any) {
       const errorMessageConfig = (

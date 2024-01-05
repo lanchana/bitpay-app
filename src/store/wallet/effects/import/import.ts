@@ -32,8 +32,8 @@ import {
   updateCacheFeeLevel,
 } from '../../wallet.actions';
 import {
-  BitpaySupportedEthereumTokenOpts,
-  BitpaySupportedTokenOpts,
+  BitpaySupportedEthereumTokenOptsByAddress,
+  BitpaySupportedTokenOptsByAddress,
 } from '../../../../constants/tokens';
 import {Platform} from 'react-native';
 import RNFS from 'react-native-fs';
@@ -91,6 +91,7 @@ import {
 import {t} from 'i18next';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import RNRestart from 'react-native-restart';
+import uniqBy from 'lodash.uniqby';
 
 const BWC = BwcProvider.getInstance();
 
@@ -155,11 +156,7 @@ export const startMigration =
       dispatch(LogActions.info('[startMigration] - starting...'));
       const goToNewUserOnboarding = () => {
         dispatch(setIntroCompleted());
-        navigationRef.dispatch(
-          StackActions.replace('Onboarding', {
-            screen: 'OnboardingStart',
-          }),
-        );
+        navigationRef.dispatch(StackActions.replace('OnboardingStart'));
       };
 
       // keys and wallets
@@ -703,10 +700,10 @@ export const migrateKeyAndWallets =
         dispatch(LogActions.info('starting [migrateKeyAndWallets]'));
         const state = getState();
         const {backupComplete, keyName} = migrationData.keyConfig;
-        const tokenOpts = {
-          ...BitpaySupportedEthereumTokenOpts,
-          ...state.WALLET.tokenOptions,
-          ...state.WALLET.customTokenOptions,
+        const tokenOptsByAddress = {
+          ...BitpaySupportedEthereumTokenOptsByAddress,
+          ...state.WALLET.tokenOptionsByAddress,
+          ...state.WALLET.customTokenOptionsByAddress,
         };
         const keyObj = merge(migrationData.key, {
           methods: BWC.createKey({
@@ -741,6 +738,7 @@ export const migrateKeyAndWallets =
             mapAbbreviationAndName(
               walletObj.credentials.coin,
               walletObj.credentials.chain,
+              walletObj.credentials.token?.address,
             ),
           );
 
@@ -755,7 +753,7 @@ export const migrateKeyAndWallets =
                   currencyAbbreviation,
                   currencyName,
                 },
-                tokenOpts,
+                tokenOptsByAddress,
               ),
             ),
           );
@@ -823,10 +821,10 @@ export const startImportMnemonic =
             defaultLanguage,
           },
         } = getState();
-        const tokenOpts = {
-          ...BitpaySupportedTokenOpts,
-          ...WALLET.tokenOptions,
-          ...WALLET.customTokenOptions,
+        const tokenOptsByAddress = {
+          ...BitpaySupportedTokenOptsByAddress,
+          ...WALLET.tokenOptionsByAddress,
+          ...WALLET.customTokenOptionsByAddress,
         };
         const {words, xPrivKey} = importData;
         opts.words = normalizeMnemonic(words);
@@ -871,13 +869,14 @@ export const startImportMnemonic =
               mapAbbreviationAndName(
                 wallet.credentials.coin,
                 wallet.credentials.chain,
+                wallet.credentials.token?.address,
               ),
             );
             return merge(
               wallet,
               buildWalletObj(
                 {...wallet.credentials, currencyAbbreviation, currencyName},
-                tokenOpts,
+                tokenOptsByAddress,
               ),
             );
           }),
@@ -911,10 +910,10 @@ export const startImportFile =
             defaultLanguage,
           },
         } = getState();
-        const tokenOpts = {
-          ...BitpaySupportedTokenOpts,
-          ...WALLET.tokenOptions,
-          ...WALLET.customTokenOptions,
+        const tokenOptsByAddress = {
+          ...BitpaySupportedTokenOptsByAddress,
+          ...WALLET.tokenOptionsByAddress,
+          ...WALLET.customTokenOptionsByAddress,
         };
         let {key: _key, wallet} = await createKeyAndCredentialsWithFile(
           decryptBackupText,
@@ -970,13 +969,14 @@ export const startImportFile =
               mapAbbreviationAndName(
                 wallet.credentials.coin,
                 wallet.credentials.chain,
+                wallet.credentials.token?.address,
               ),
             );
             return merge(
               wallet,
               buildWalletObj(
                 {...wallet.credentials, currencyAbbreviation, currencyName},
-                tokenOpts,
+                tokenOptsByAddress,
               ),
             );
           }),
@@ -1014,10 +1014,10 @@ export const startImportWithDerivationPath =
             defaultLanguage,
           },
         } = getState();
-        const tokenOpts = {
-          ...BitpaySupportedTokenOpts,
-          ...WALLET.tokenOptions,
-          ...WALLET.customTokenOptions,
+        const tokenOptsByAddress = {
+          ...BitpaySupportedTokenOptsByAddress,
+          ...WALLET.tokenOptionsByAddress,
+          ...WALLET.customTokenOptionsByAddress,
         };
         const {words, xPrivKey} = importData;
         opts.mnemonic = words;
@@ -1066,6 +1066,7 @@ export const startImportWithDerivationPath =
             mapAbbreviationAndName(
               wallet.credentials.coin,
               wallet.credentials.chain,
+              wallet.credentials.token?.address,
             ),
           );
 
@@ -1084,7 +1085,7 @@ export const startImportWithDerivationPath =
                     currencyAbbreviation,
                     currencyName,
                   },
-                  tokenOpts,
+                  tokenOptsByAddress,
                 ),
               ),
             );
@@ -1096,7 +1097,7 @@ export const startImportWithDerivationPath =
                   wallet,
                   buildWalletObj(
                     {...wallet.credentials, currencyAbbreviation, currencyName},
-                    tokenOpts,
+                    tokenOptsByAddress,
                   ),
                 ),
               ],
@@ -1288,6 +1289,11 @@ export const serverAssistedImport = async (
           if (wallets.length === 0) {
             return reject(new Error('WALLET_DOES_NOT_EXIST'));
           } else {
+            // remove duplicate wallets
+            wallets = uniqBy(wallets, w => {
+              return (w as any).credentials.walletId;
+            });
+
             const tokens: Wallet[] = wallets.filter(
               (wallet: Wallet) => !!wallet.credentials.token,
             );

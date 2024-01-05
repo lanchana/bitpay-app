@@ -65,7 +65,7 @@ const SardineSettings: React.FC = () => {
   useEffect(() => {
     if (isFocused) {
       const sardinePaymentRequests = Object.values(sardineHistory).filter(
-        pr => pr.env === (__DEV__ ? 'dev' : 'prod'),
+        pr => pr.env === (__DEV__ ? 'dev' : 'prod') && !!pr.order_id,
       );
       setTransactions(sardinePaymentRequests);
     }
@@ -88,11 +88,8 @@ const SardineSettings: React.FC = () => {
                     key={pr.external_id}
                     onPress={() => {
                       haptic('impactLight');
-                      navigation.navigate('ExternalServicesSettings', {
-                        screen: 'SardineDetails',
-                        params: {
-                          paymentRequest: pr,
-                        },
+                      navigation.navigate('SardineDetails', {
+                        paymentRequest: pr,
                       });
                     }}>
                     <PrRowLeft>
@@ -106,7 +103,7 @@ const SardineSettings: React.FC = () => {
                             : t('Payment request expired')}
                         </PrTxtStatus>
                       )}
-                      {pr.status === 'Complete' && (
+                      {['Complete', 'Completed'].includes(pr.status) && (
                         <PrTxtStatus style={{color: '#01d1a2'}}>
                           {t('Payment request completed')}
                         </PrTxtStatus>
@@ -146,7 +143,7 @@ const SardineSettings: React.FC = () => {
         </Settings>
       </SettingsContainer>
       <FooterSupport>
-        <SupportTxt>Having problems with Sardine?</SupportTxt>
+        <SupportTxt>{t('Having problems with Sardine?')}</SupportTxt>
         <TouchableOpacity
           onPress={() => {
             haptic('impactLight');

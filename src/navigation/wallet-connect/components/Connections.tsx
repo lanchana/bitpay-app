@@ -49,17 +49,16 @@ const Connections = ({
         topic={session?.topic}
         keyId={keyId!}
         isLast={false}
+        touchable={true}
         onPress={(_keyId: string, walletObj: WCV2Wallet) => {
           haptic('impactLight');
-          navigation.navigate('WalletConnect', {
-            screen: 'WalletConnectHome',
-            params: {
-              topic: session?.topic,
-              wallet: walletObj.wallet,
-            },
+          navigation.navigate('WalletConnectHome', {
+            topic: session?.topic,
+            wallet: walletObj.wallet,
           });
         }}
         showCheckbox={false}
+        showAddress={true}
       />
     </NoGutter>
   ) : null;

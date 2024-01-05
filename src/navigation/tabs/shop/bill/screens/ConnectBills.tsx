@@ -1,8 +1,8 @@
 import React, {useEffect, useLayoutEffect, useState} from 'react';
-import {StackScreenProps} from '@react-navigation/stack';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import WebView from 'react-native-webview';
 import {useSafeAreaInsets} from 'react-native-safe-area-context';
-import {BillStackParamList} from '../BillStack';
+import {BillGroupParamList} from '../BillGroup';
 import {ShopEffects} from '../../../../../store/shop';
 import {useAppDispatch, useAppSelector} from '../../../../../utils/hooks';
 import {startOnGoingProcessModal} from '../../../../../store/app/app.effects';
@@ -15,12 +15,14 @@ import {BitPayIdEffects} from '../../../../../store/bitpay-id';
 
 const ConnectBills = ({
   navigation,
-}: StackScreenProps<BillStackParamList, 'ConnectBills'>) => {
+  route,
+}: NativeStackScreenProps<BillGroupParamList, 'ConnectBills'>) => {
   const dispatch = useAppDispatch();
   const {t} = useTranslation();
   const insets = useSafeAreaInsets();
   const [isWebViewShown, setIsWebViewShown] = useState(true);
   const [token, setToken] = useState('');
+  const [publicAccountToken, setPublicAccountToken] = useState('');
   const [exiting, setExiting] = useState(false);
   const apiToken = useAppSelector(
     ({BITPAY_ID}) => BITPAY_ID.apiToken[APP_NETWORK],
@@ -34,7 +36,7 @@ const ConnectBills = ({
   useEffect(() => {
     const getToken = async () => {
       const authElementToken = await dispatch(
-        ShopEffects.startGetAuthElementToken(),
+        ShopEffects.startGetMethodToken({tokenType: route.params.tokenType}),
       );
       setToken(authElementToken);
     };
@@ -59,11 +61,19 @@ const ConnectBills = ({
     }
     setExiting(true);
     dispatch(dismissOnGoingProcessModal());
+    if (publicAccountToken) {
+      await dispatch(
+        ShopEffects.exchangeMethodAccountToken(publicAccountToken),
+      );
+    }
     await Promise.all([
       dispatch(ShopEffects.startGetBillPayAccounts()),
       dispatch(BitPayIdEffects.startFetchBasicInfo(apiToken)),
     ]);
-    navigation.pop();
+    navigation.popToTop();
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
   };
 
   const handleNavigationStateChange = (event: any) => {
@@ -71,12 +81,7 @@ const ConnectBills = ({
       const searchParams = new URLSearchParams(`?${event.url.split('?')[1]}`);
       const params = Object.fromEntries(searchParams);
       const op = searchParams.get('op');
-      let response = {...params};
-
-      if (params.accounts) {
-        response.accounts = JSON.parse(params.accounts);
-      }
-
+      setPublicAccountToken(params.public_account_token || publicAccountToken);
       switch (op) {
         case 'open':
           dispatch(dismissOnGoingProcessModal());

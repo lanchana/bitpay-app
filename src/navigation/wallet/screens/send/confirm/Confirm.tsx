@@ -1,7 +1,7 @@
 import React, {useState, useEffect, useCallback, useLayoutEffect} from 'react';
 import {useNavigation, useRoute, CommonActions} from '@react-navigation/native';
 import {RouteProp, StackActions} from '@react-navigation/core';
-import {WalletStackParamList} from '../../../WalletStack';
+import {WalletGroupParamList} from '../../../WalletGroup';
 import {useAppDispatch, useAppSelector} from '../../../../../utils/hooks';
 import {
   Recipient,
@@ -18,7 +18,11 @@ import {
   startSendPayment,
 } from '../../../../../store/wallet/effects/send/send';
 import PaymentSent from '../../../components/PaymentSent';
-import {formatFiatAmount, sleep} from '../../../../../utils/helper-methods';
+import {
+  formatCurrencyAbbreviation,
+  formatFiatAmount,
+  sleep,
+} from '../../../../../utils/helper-methods';
 import {
   openUrlWithInAppBrowser,
   startOnGoingProcessModal,
@@ -84,6 +88,9 @@ import {Analytics} from '../../../../../store/analytics/analytics.effects';
 import SendingToERC20Warning from '../../../components/SendingToERC20Warning';
 import {HIGH_FEE_LIMIT} from '../../../../../constants/wallet';
 import WarningSvg from '../../../../../../assets/img/warning.svg';
+import {CoinbaseScreens} from '../../../../../navigation/coinbase/CoinbaseGroup';
+import {RootStacks} from '../../../../../Root';
+import {TabsScreens} from '../../../../../navigation/tabs/TabsStack';
 
 const VerticalPadding = styled.View`
   padding: ${ScreenGutter} 0;
@@ -125,7 +132,7 @@ const Confirm = () => {
   const dispatch = useAppDispatch();
   const navigation = useNavigation();
   const {t} = useTranslation();
-  const route = useRoute<RouteProp<WalletStackParamList, 'Confirm'>>();
+  const route = useRoute<RouteProp<WalletGroupParamList, 'Confirm'>>();
   const {
     wallet,
     recipient,
@@ -179,10 +186,10 @@ const Confirm = () => {
   const [destinationTag, setDestinationTag] = useState(
     recipient?.destinationTag || _destinationTag,
   );
-  const {currencyAbbreviation, chain} = wallet;
+  const {currencyAbbreviation, chain, tokenAddress} = wallet;
   const feeOptions = GetFeeOptions(chain);
   const {unitToSatoshi} =
-    dispatch(GetPrecision(currencyAbbreviation, chain)) || {};
+    dispatch(GetPrecision(currencyAbbreviation, chain, tokenAddress)) || {};
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: () => (
@@ -332,7 +339,7 @@ const Confirm = () => {
   );
 
   const checkHighFees = async () => {
-    const {feeUnitAmount} = dispatch(GetFeeUnits(currencyAbbreviation, chain));
+    const {feeUnitAmount} = GetFeeUnits(chain);
     let feePerKb: number;
     if (txp.feePerKb) {
       feePerKb = txp.feePerKb;
@@ -357,10 +364,19 @@ const Confirm = () => {
         recipientName: r.name,
         recipientAddress: r.address,
         img: r.type === 'contact' ? r.type : wallet.img,
-        recipientAmountStr: `${r.amount} ${currencyAbbreviation.toUpperCase()}`,
+        recipientAmountStr: `${r.amount} ${formatCurrencyAbbreviation(
+          currencyAbbreviation,
+        )}`,
         recipientAltAmountStr: formatFiatAmount(
           dispatch(
-            toFiat(amountSat, isoCode, currencyAbbreviation, chain, rates),
+            toFiat(
+              amountSat,
+              isoCode,
+              currencyAbbreviation,
+              chain,
+              rates,
+              tokenAddress,
+            ),
           ),
           isoCode,
         ),
@@ -381,6 +397,7 @@ const Confirm = () => {
       img: recipient.type,
       recipientChain: recipient.chain,
       recipientType: recipient.type,
+      recipientTokenAddress: recipient.tokenAddress,
     };
   } else {
     recipientData = sendingTo;
@@ -550,31 +567,28 @@ const Confirm = () => {
             if (recipient.type === 'coinbase') {
               navigation.dispatch(
                 CommonActions.reset({
-                  index: 2,
+                  index: 1,
                   routes: [
                     {
-                      name: 'Tabs',
-                      params: {screen: 'Home'},
+                      name: RootStacks.TABS,
+                      params: {screen: TabsScreens.HOME},
                     },
                     {
-                      name: 'Coinbase',
-                      params: {
-                        screen: 'CoinbaseRoot',
-                      },
+                      name: CoinbaseScreens.ROOT,
+                      params: {},
                     },
                   ],
                 }),
               );
             } else {
+              await sleep(500);
               navigation.dispatch(StackActions.popToTop());
               navigation.dispatch(
-                StackActions.replace('WalletDetails', {
+                StackActions.push('WalletDetails', {
                   walletId: wallet!.id,
                   key,
                 }),
               );
-              await sleep(0);
-              setShowPaymentSentModal(false);
             }
           }}
         />

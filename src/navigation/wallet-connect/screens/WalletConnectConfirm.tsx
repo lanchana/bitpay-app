@@ -15,7 +15,7 @@ import {
   dismissOnGoingProcessModal,
   showBottomNotificationModal,
 } from '../../../store/app/app.actions';
-import {WalletConnectStackParamList} from '../WalletConnectStack';
+import {WalletConnectGroupParamList} from '../WalletConnectGroup';
 import PaymentSent from '../../wallet/components/PaymentSent';
 import Button from '../../../components/button/Button';
 import haptic from '../../../components/haptic-feedback/haptic';
@@ -51,9 +51,7 @@ import {
 } from '../../../store/wallet-connect-v2/wallet-connect-v2.effects';
 import {buildTxDetails} from '../../../store/wallet/effects/send/send';
 
-const HeaderRightContainer = styled.View`
-  margin-right: 15px;
-`;
+const HeaderRightContainer = styled.View``;
 
 export interface WalletConnectConfirmParamList {
   wallet: Wallet;
@@ -67,7 +65,7 @@ const WalletConnectConfirm = () => {
   const dispatch = useAppDispatch();
   const navigation = useNavigation();
   const route =
-    useRoute<RouteProp<WalletConnectStackParamList, 'WalletConnectConfirm'>>();
+    useRoute<RouteProp<WalletConnectGroupParamList, 'WalletConnectConfirm'>>();
   const {wallet, request, peerName, recipient} = route.params;
   const [showPaymentSentModal, setShowPaymentSentModal] = useState(false);
   const [resetSwipeButton, setResetSwipeButton] = useState(false);
@@ -77,19 +75,28 @@ const WalletConnectConfirm = () => {
   const [txDetails, setTxDetails] = useState<TxDetails>();
 
   const _setTxDetails = async () => {
-    const feePerKb = await getFeeRatePerKb({wallet, feeLevel: 'normal'});
-    const _txDetails = dispatch(
-      buildTxDetails({
-        wallet,
-        rates,
-        defaultAltCurrencyIsoCode: defaultAltCurrency.isoCode,
-        recipient,
-        context: 'walletConnect',
-        request,
-        feePerKb,
-      }),
-    );
-    setTxDetails(_txDetails);
+    try {
+      const feePerKb = await getFeeRatePerKb({wallet, feeLevel: 'normal'});
+      const _txDetails = await dispatch(
+        buildTxDetails({
+          wallet,
+          rates,
+          defaultAltCurrencyIsoCode: defaultAltCurrency.isoCode,
+          recipient,
+          context: 'walletConnect',
+          request,
+          feePerKb,
+        }),
+      );
+      setTxDetails(_txDetails);
+    } catch (err) {
+      await showErrorMessage(
+        CustomErrorMessage({
+          errMsg: BWCErrorMessage(err),
+          title: t('Uh oh, something went wrong'),
+        }),
+      );
+    }
   };
 
   useEffect(() => {
@@ -152,6 +159,7 @@ const WalletConnectConfirm = () => {
       await sleep(1000);
       navigation.goBack();
     } catch (err) {
+      dispatch(dismissOnGoingProcessModal());
       await showErrorMessage(
         CustomErrorMessage({
           errMsg: BWCErrorMessage(err),
@@ -189,6 +197,7 @@ const WalletConnectConfirm = () => {
       <DetailsList>
         <Header>Summary</Header>
         <Banner
+          height={100}
           type={'warning'}
           description={''}
           transComponent={

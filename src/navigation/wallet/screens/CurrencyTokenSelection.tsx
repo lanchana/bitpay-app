@@ -1,4 +1,4 @@
-import {StackScreenProps} from '@react-navigation/stack';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import React, {
   useCallback,
   useLayoutEffect,
@@ -30,7 +30,7 @@ import {Key} from '../../../store/wallet/wallet.models';
 import {LightBlack, Slate30} from '../../../styles/colors';
 import CurrencySelectionNoResults from '../components/CurrencySelectionNoResults';
 import CurrencySelectionSearchInput from '../components/CurrencySelectionSearchInput';
-import {WalletScreens, WalletStackParamList} from '../WalletStack';
+import {WalletScreens, WalletGroupParamList} from '../WalletGroup';
 import {
   ContextHandler,
   CurrencySelectionContainer,
@@ -45,7 +45,7 @@ export type CurrencyTokenSelectionScreenParamList = {
   description?: string;
   hideCheckbox?: boolean;
   selectionMode?: CurrencySelectionMode;
-  onToggle: (id: string, chain?: string) => any;
+  onToggle: (id: string, chain: string, tokenAddress?: string) => any;
   contextHandler: () => ContextHandler;
 };
 
@@ -77,7 +77,10 @@ const styles = StyleSheet.create({
 const keyExtractor = (item: CurrencySelectionItem) => item.id;
 
 const CurrencyTokenSelectionScreen: React.VFC<
-  StackScreenProps<WalletStackParamList, WalletScreens.CURRENCY_TOKEN_SELECTION>
+  NativeStackScreenProps<
+    WalletGroupParamList,
+    WalletScreens.CURRENCY_TOKEN_SELECTION
+  >
 > = ({navigation, route}) => {
   const {t} = useTranslation();
   const theme = useTheme();
@@ -97,7 +100,8 @@ const CurrencyTokenSelectionScreen: React.VFC<
       (accum, item) => {
         if (
           item.currencyAbbreviation.toLowerCase().includes(searchFilter) ||
-          item.currencyName.toLowerCase().includes(searchFilter)
+          item.currencyName.toLowerCase().includes(searchFilter) ||
+          item?.tokenAddress?.toLowerCase().includes(searchFilter)
         ) {
           accum.push(item);
         }
@@ -185,7 +189,8 @@ const CurrencyTokenSelectionScreen: React.VFC<
 
   const onTokenToggle = (
     currencyAbbreviation: string,
-    currencyChain?: string,
+    currencyChain: string,
+    tokenAddress: string,
   ) => {
     haptic(IS_ANDROID ? 'keyboardPress' : 'impactLight');
 
@@ -199,7 +204,7 @@ const CurrencyTokenSelectionScreen: React.VFC<
 
       setTokens(prev =>
         prev.map(token =>
-          token.currencyAbbreviation === currencyAbbreviation
+          token.tokenAddress === tokenAddress
             ? {
                 ...token,
                 selected: !token.selected,
@@ -219,7 +224,7 @@ const CurrencyTokenSelectionScreen: React.VFC<
 
       setTokens(prev =>
         prev.map(token => {
-          if (token.currencyAbbreviation === currencyAbbreviation) {
+          if (token.tokenAddress === tokenAddress) {
             return {
               ...token,
               selected: !token.selected,
@@ -236,14 +241,15 @@ const CurrencyTokenSelectionScreen: React.VFC<
       );
     }
 
-    params.onToggle(currencyAbbreviation, currencyChain);
+    params.onToggle(currencyAbbreviation, currencyChain, tokenAddress);
   };
 
   const onTokenToggleRef = useRef(onTokenToggle);
   onTokenToggleRef.current = onTokenToggle;
 
   const memoizedOnTokenToggle = useCallback(
-    (id, chain) => onTokenToggleRef.current(id, chain),
+    (currencyAbbreviation: string, chain: string, tokenAddress: string) =>
+      onTokenToggleRef.current(currencyAbbreviation, chain, tokenAddress),
     [],
   );
 

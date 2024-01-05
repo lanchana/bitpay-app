@@ -52,7 +52,7 @@ import {
 import {useNavigation, useRoute} from '@react-navigation/native';
 import {ImportObj} from '../../../store/scan/scan.models';
 import {RouteProp} from '@react-navigation/core';
-import {WalletStackParamList} from '../WalletStack';
+import {WalletGroupParamList} from '../WalletGroup';
 import {startOnGoingProcessModal} from '../../../store/app/app.effects';
 import {backupRedirect} from '../screens/Backup';
 import {RootState} from '../../../store';
@@ -80,7 +80,7 @@ import CurrencySelectionRow from '../../../components/list/CurrencySelectionRow'
 import {updatePortfolioBalance} from '../../../store/wallet/wallet.actions';
 import {
   GetName,
-  isSingleAddressCoin,
+  isSingleAddressChain,
 } from '../../../store/wallet/utils/currency';
 import {useTranslation} from 'react-i18next';
 import {KeyboardAwareScrollView} from 'react-native-keyboard-aware-scroll-view';
@@ -186,7 +186,7 @@ const RecoveryPhrase = () => {
   const dispatch = useAppDispatch();
   const logger = useLogger();
   const navigation = useNavigation();
-  const route = useRoute<RouteProp<WalletStackParamList, 'Import'>>();
+  const route = useRoute<RouteProp<WalletGroupParamList, 'Import'>>();
   const walletTermsAccepted = useAppSelector(
     ({WALLET}: RootState) => WALLET.walletTermsAccepted,
   );
@@ -341,9 +341,7 @@ const RecoveryPhrase = () => {
         : 1;
 
       keyOpts.coin = advancedOpts.coin.toLowerCase();
-      keyOpts.singleAddress = dispatch(
-        isSingleAddressCoin(advancedOpts.coin, advancedOpts.chain),
-      );
+      keyOpts.singleAddress = isSingleAddressChain(advancedOpts.chain);
 
       // set opts.useLegacyPurpose
       if (parsePath(derivationPath).purpose === "44'" && keyOpts.n > 1) {
@@ -584,12 +582,9 @@ const RecoveryPhrase = () => {
                   context: 'RecoveryPhrase',
                 }),
               );
-              navigation.navigate('Scan', {
-                screen: 'Root',
-                params: {
-                  onScanComplete: data => {
-                    processImportQrCode(data);
-                  },
+              navigation.navigate('ScanRoot', {
+                onScanComplete: data => {
+                  processImportQrCode(data);
                 },
               });
             }}>

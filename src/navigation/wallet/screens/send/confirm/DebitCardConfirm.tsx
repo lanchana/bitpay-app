@@ -1,7 +1,7 @@
 import React, {useEffect, useMemo, useState} from 'react';
 import {useNavigation, useRoute, StackActions} from '@react-navigation/native';
 import {RouteProp} from '@react-navigation/core';
-import {WalletScreens, WalletStackParamList} from '../../../WalletStack';
+import {WalletScreens, WalletGroupParamList} from '../../../WalletGroup';
 import {useAppDispatch, useAppSelector} from '../../../../../utils/hooks';
 import {
   Balance,
@@ -92,7 +92,7 @@ const Confirm = () => {
   const {t} = useTranslation();
   const dispatch = useAppDispatch();
   const navigation = useNavigation();
-  const route = useRoute<RouteProp<WalletStackParamList, 'DebitCardConfirm'>>();
+  const route = useRoute<RouteProp<WalletGroupParamList, 'DebitCardConfirm'>>();
   const {
     amount,
     card,
@@ -197,7 +197,7 @@ const Confirm = () => {
         transactionCurrency,
       });
       const rates = await dispatch(startGetRates({}));
-      const newTxDetails = dispatch(
+      const newTxDetails = await dispatch(
         buildTxDetails({
           invoice: newInvoice,
           wallet: walletRowProps,
@@ -310,21 +310,18 @@ const Confirm = () => {
   };
 
   const request2FA = async () => {
-    navigation.navigate('Wallet', {
-      screen: WalletScreens.PAY_PRO_CONFIRM_TWO_FACTOR,
-      params: {
-        onSubmit: async twoFactorCode => {
-          try {
-            await sendPayment(twoFactorCode);
-          } catch (error: any) {
-            dispatch(dismissOnGoingProcessModal());
-            const invalid2faMessage = CoinbaseErrorMessages.twoFactorInvalid;
-            error?.message?.includes(CoinbaseErrorMessages.twoFactorInvalid)
-              ? showError({defaultErrorMessage: invalid2faMessage})
-              : handlePaymentFailure(error);
-            throw error;
-          }
-        },
+    navigation.navigate(WalletScreens.PAY_PRO_CONFIRM_TWO_FACTOR, {
+      onSubmit: async twoFactorCode => {
+        try {
+          await sendPayment(twoFactorCode);
+        } catch (error: any) {
+          dispatch(dismissOnGoingProcessModal());
+          const invalid2faMessage = CoinbaseErrorMessages.twoFactorInvalid;
+          error?.message?.includes(CoinbaseErrorMessages.twoFactorInvalid)
+            ? showError({defaultErrorMessage: invalid2faMessage})
+            : handlePaymentFailure(error);
+          throw error;
+        }
       },
     });
     await sleep(400);
@@ -358,7 +355,7 @@ const Confirm = () => {
                 <RightMargin>
                   <VisaCardSvg height={55} width={55} />
                 </RightMargin>
-                <H6>{t('BitPay Visa&reg; Card ()', {lastFourDigits})}</H6>
+                <H6>{t('BitPay Visa® Card ()', {lastFourDigits})}</H6>
               </CardDetailsContainer>
             )}
 

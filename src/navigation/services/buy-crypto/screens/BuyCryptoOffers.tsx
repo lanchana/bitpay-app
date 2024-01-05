@@ -50,7 +50,6 @@ import {
   RampQuoteResultForPaymentMethod,
   SardineGetAuthTokenRequestData,
   SardineGetQuoteRequestData,
-  SardinePaymentData,
   SardinePaymentUrlConfigParams,
   SimplexGetQuoteRequestData,
   SimplexPaymentData,
@@ -136,6 +135,7 @@ export type CryptoOffer = {
   showOffer: boolean;
   logo: JSX.Element;
   expanded: boolean;
+  buyClicked: boolean;
   fiatCurrency: string;
   fiatAmount: number;
   amountCost?: number;
@@ -150,6 +150,10 @@ export type CryptoOffer = {
   paymentMethodId?: number; // Banxa
   outOfLimitMsg?: string;
 };
+
+const BuyCryptoOffersContainer = styled.SafeAreaView`
+  flex: 1;
+`;
 
 const SummaryRow = styled.View`
   display: flex;
@@ -306,6 +310,7 @@ const offersDefault: {
     showOffer: true,
     logo: <BanxaLogo width={70} height={20} />,
     expanded: false,
+    buyClicked: false,
     fiatCurrency: 'USD',
     fiatAmount: 0,
     fiatMoney: undefined,
@@ -318,6 +323,7 @@ const offersDefault: {
     showOffer: true,
     logo: <MoonpayLogo widthIcon={25} heightIcon={25} />,
     expanded: false,
+    buyClicked: false,
     fiatCurrency: 'USD',
     fiatAmount: 0,
     fiatMoney: undefined,
@@ -330,6 +336,7 @@ const offersDefault: {
     showOffer: true,
     logo: <RampLogo width={70} height={20} />,
     expanded: false,
+    buyClicked: false,
     fiatCurrency: 'USD',
     fiatAmount: 0,
     fiatMoney: undefined,
@@ -342,6 +349,7 @@ const offersDefault: {
     showOffer: true,
     logo: <SardineLogo width={70} height={20} />,
     expanded: false,
+    buyClicked: false,
     fiatCurrency: 'USD',
     fiatAmount: 0,
     fiatMoney: undefined,
@@ -361,6 +369,7 @@ const offersDefault: {
       />
     ),
     expanded: false,
+    buyClicked: false,
     fiatCurrency: 'USD',
     fiatAmount: 0,
     fiatMoney: undefined,
@@ -433,6 +442,7 @@ const BuyCryptoOffers: React.FC = () => {
   });
 
   const [offers, setOffers] = useState(cloneDeep(offersDefault));
+  const [openingBrowser, setOpeningBrowser] = useState(false);
   const [finishedBanxa, setFinishedBanxa] = useState(false);
   const [finishedMoonpay, setFinishedMoonpay] = useState(false);
   const [finishedRamp, setFinishedRamp] = useState(false);
@@ -572,7 +582,9 @@ const BuyCryptoOffers: React.FC = () => {
               Number(data.fee_amount) + Number(data.network_fee);
             offers.banxa.buyAmount = offers.banxa.amountCost - offers.banxa.fee;
 
-            const precision = dispatch(GetPrecision(coin, chain));
+            const precision = dispatch(
+              GetPrecision(coin, chain, selectedWallet.tokenAddress),
+            );
             if (offers.banxa.buyAmount && coin && precision) {
               offers.banxa.fiatMoney = Number(
                 offers.banxa.buyAmount / Number(data.coin_amount),
@@ -770,7 +782,9 @@ const BuyCryptoOffers: React.FC = () => {
             offers.moonpay.fee =
               Number(data.totalAmount) - Number(data.baseCurrencyAmount);
 
-            const precision = dispatch(GetPrecision(coin, chain));
+            const precision = dispatch(
+              GetPrecision(coin, chain, selectedWallet.tokenAddress),
+            );
             if (offers.moonpay.buyAmount && coin && precision) {
               offers.moonpay.fiatMoney = Number(
                 offers.moonpay.buyAmount / data.quoteCurrencyAmount,
@@ -982,7 +996,9 @@ const BuyCryptoOffers: React.FC = () => {
             Number(paymentMethodData.appliedFee);
           offers.ramp.fee = Number(paymentMethodData.appliedFee);
 
-          const precision = dispatch(GetPrecision(coin, chain));
+          const precision = dispatch(
+            GetPrecision(coin, chain, selectedWallet.tokenAddress),
+          );
           let decimals: number | undefined;
 
           if (data.asset.decimals && data.asset.decimals > 0) {
@@ -1141,7 +1157,9 @@ const BuyCryptoOffers: React.FC = () => {
             offers.sardine.buyAmount = data.subtotal;
             offers.sardine.fee = data.total - data.subtotal;
 
-            const precision = dispatch(GetPrecision(coin, chain));
+            const precision = dispatch(
+              GetPrecision(coin, chain, selectedWallet.tokenAddress),
+            );
             if (offers.sardine.buyAmount && coin && precision) {
               offers.sardine.fiatMoney = Number(
                 offers.sardine.buyAmount / data.quantity,
@@ -1287,7 +1305,9 @@ const BuyCryptoOffers: React.FC = () => {
             offers.simplex.fee =
               data.fiat_money.total_amount - data.fiat_money.base_amount;
 
-            const precision = dispatch(GetPrecision(coin, chain));
+            const precision = dispatch(
+              GetPrecision(coin, chain, selectedWallet.tokenAddress),
+            );
             if (offers.simplex.buyAmount && coin && precision) {
               offers.simplex.fiatMoney = Number(
                 offers.simplex.buyAmount / data.digital_money.amount,
@@ -1437,6 +1457,7 @@ const BuyCryptoOffers: React.FC = () => {
     } catch (err) {
       const reason = 'banxaCreateOrder Error';
       showBanxaError(err, reason);
+      setOpeningBrowser(false);
       return;
     }
 
@@ -1447,6 +1468,7 @@ const BuyCryptoOffers: React.FC = () => {
         'banxaCreateOrder Error: No checkout_url or id value provided from Banxa';
       logger.error(reason);
       showBanxaError(undefined, reason);
+      setOpeningBrowser(false);
       return;
     }
 
@@ -1553,6 +1575,7 @@ const BuyCryptoOffers: React.FC = () => {
     } catch (err) {
       const reason = 'moonpayGetSignedPaymentUrl Error';
       showMoonpayError(err, reason);
+      setOpeningBrowser(false);
       return;
     }
 
@@ -1644,6 +1667,7 @@ const BuyCryptoOffers: React.FC = () => {
     } catch (err) {
       const reason = 'rampGetSignedPaymentUrl Error';
       showRampError(err, reason);
+      setOpeningBrowser(false);
       return;
     }
 
@@ -1654,6 +1678,7 @@ const BuyCryptoOffers: React.FC = () => {
       const reason =
         'rampGetSignedPaymentUrl Error. Could not generate urlWithSignature';
       showRampError(err, reason);
+      setOpeningBrowser(false);
       return;
     }
 
@@ -1702,29 +1727,9 @@ const BuyCryptoOffers: React.FC = () => {
     } catch (err) {
       const reason = 'sardineGetAuthToken Error';
       showSardineError(err, reason);
+      setOpeningBrowser(false);
       return;
     }
-
-    const newData: SardinePaymentData = {
-      address,
-      chain: destinationChain,
-      created_on: Date.now(),
-      crypto_amount: Number(offers.sardine.amountReceiving),
-      coin: coin.toUpperCase(),
-      env: __DEV__ ? 'dev' : 'prod',
-      fiat_base_amount: offers.sardine.buyAmount!,
-      fiat_total_amount: offers.sardine.amountCost!,
-      fiat_total_amount_currency: offers.sardine.fiatCurrency,
-      external_id: sardineExternalId,
-      status: 'paymentRequestSent',
-      user_id: selectedWallet.id,
-    };
-
-    dispatch(
-      BuyCryptoActions.successPaymentRequestSardine({
-        sardinePaymentData: newData,
-      }),
-    );
 
     dispatch(
       Analytics.track('Requested Crypto Purchase', {
@@ -1743,7 +1748,25 @@ const BuyCryptoOffers: React.FC = () => {
       sardineExternalId +
       '&walletId=' +
       selectedWallet.id +
-      '&status=pending';
+      '&status=pending' +
+      '&address=' +
+      address +
+      '&chain=' +
+      destinationChain +
+      '&createdOn=' +
+      Date.now() +
+      '&cryptoAmount=' +
+      Number(offers.sardine.amountReceiving) +
+      '&coin=' +
+      coin.toUpperCase() +
+      '&env=' +
+      (__DEV__ ? 'dev' : 'prod') +
+      '&fiatBaseAmount=' +
+      offers.sardine.buyAmount +
+      '&fiatTotalAmount=' +
+      offers.sardine.amountCost +
+      '&fiatTotalAmountCurrency=' +
+      offers.sardine.fiatCurrency;
 
     const quoteData: SardinePaymentUrlConfigParams = {
       env: sardineEnv,
@@ -1768,6 +1791,7 @@ const BuyCryptoOffers: React.FC = () => {
     } catch (err) {
       const reason = 'sardineGetSignedPaymentUrl Error';
       showSardineError(err, reason);
+      setOpeningBrowser(false);
       return;
     }
 
@@ -1778,6 +1802,7 @@ const BuyCryptoOffers: React.FC = () => {
       const reason =
         'sardineGetSignedPaymentUrl Error. Could not generate urlWithSignature';
       showSardineError(err, reason);
+      setOpeningBrowser(false);
       return;
     }
 
@@ -1817,6 +1842,7 @@ const BuyCryptoOffers: React.FC = () => {
         if (req && req.error) {
           const reason = 'simplexPaymentRequest Error';
           showSimplexError(req.error, reason);
+          setOpeningBrowser(false);
           return;
         }
 
@@ -1879,6 +1905,7 @@ const BuyCryptoOffers: React.FC = () => {
       .catch(err => {
         const reason = 'simplexPaymentRequest Error';
         showSimplexError(err, reason);
+        setOpeningBrowser(false);
       });
   };
 
@@ -1957,210 +1984,232 @@ const BuyCryptoOffers: React.FC = () => {
   ]);
 
   return (
-    <ScrollView>
-      <SummaryRow>
-        <SummaryItemContainer>
-          <SummaryTitle>{t('Amount')}</SummaryTitle>
-          <SummaryData>
-            {formatFiatAmount(Number(amount), fiatCurrency, {
-              customPrecision: 'minimal',
-            })}
-          </SummaryData>
-        </SummaryItemContainer>
-        <SummaryItemContainer>
-          <SummaryTitle>{t('Crypto')}</SummaryTitle>
-          <CoinContainer>
-            <CoinIconContainer>
-              <CurrencyImage
-                img={selectedWallet.img}
-                badgeUri={getBadgeImg(
-                  getCurrencyAbbreviation(
-                    selectedWallet.currencyAbbreviation,
+    <BuyCryptoOffersContainer>
+      <ScrollView>
+        <SummaryRow>
+          <SummaryItemContainer>
+            <SummaryTitle>{t('Amount')}</SummaryTitle>
+            <SummaryData>
+              {formatFiatAmount(Number(amount), fiatCurrency, {
+                customPrecision: 'minimal',
+              })}
+            </SummaryData>
+          </SummaryItemContainer>
+          <SummaryItemContainer>
+            <SummaryTitle>{t('Crypto')}</SummaryTitle>
+            <CoinContainer>
+              <CoinIconContainer>
+                <CurrencyImage
+                  img={selectedWallet.img}
+                  badgeUri={getBadgeImg(
+                    getCurrencyAbbreviation(
+                      selectedWallet.currencyAbbreviation,
+                      selectedWallet.chain,
+                    ),
                     selectedWallet.chain,
-                  ),
-                  selectedWallet.chain,
-                )}
-                size={20}
-              />
-            </CoinIconContainer>
-            <SummaryData>{coin.toUpperCase()}</SummaryData>
-          </CoinContainer>
-        </SummaryItemContainer>
-        <SummaryItemContainer>
-          <SummaryTitle>{t('Payment Type')}</SummaryTitle>
-          <SummaryData>{paymentMethod.label}</SummaryData>
-        </SummaryItemContainer>
-        <SummaryCtaContainer>
-          <Button
-            buttonStyle={'secondary'}
-            buttonType={'pill'}
-            buttonOutline={true}
-            onPress={() => {
-              navigation.goBack();
-            }}>
-            Edit
-          </Button>
-        </SummaryCtaContainer>
-      </SummaryRow>
-
-      {Object.values(offers)
-        .sort(
-          (a, b) =>
-            parseFloat(b.amountReceiving || '0') -
-            parseFloat(a.amountReceiving || '0'),
-        )
-        .map((offer: CryptoOffer, index: number) => {
-          return offer.showOffer ? (
-            <BuyCryptoExpandibleCard
-              key={offer.key}
+                  )}
+                  size={20}
+                />
+              </CoinIconContainer>
+              <SummaryData>{coin.toUpperCase()}</SummaryData>
+            </CoinContainer>
+          </SummaryItemContainer>
+          <SummaryItemContainer>
+            <SummaryTitle>{t('Payment Type')}</SummaryTitle>
+            <SummaryData>{paymentMethod.label}</SummaryData>
+          </SummaryItemContainer>
+          <SummaryCtaContainer>
+            <Button
+              buttonStyle={'secondary'}
+              buttonType={'pill'}
+              buttonOutline={true}
               onPress={() => {
-                expandCard(offer);
+                navigation.goBack();
               }}>
-              {!offer.fiatMoney && !offer.errorMsg && !offer.outOfLimitMsg ? (
-                <SpinnerContainer>
-                  <ActivityIndicator color={ProgressBlue} />
-                </SpinnerContainer>
-              ) : null}
-              {!offer.fiatMoney && offer.outOfLimitMsg ? (
-                <OfferDataContainer>
-                  <OfferDataInfoLabel>{offer.outOfLimitMsg}</OfferDataInfoLabel>
-                </OfferDataContainer>
-              ) : null}
-              {!offer.fiatMoney && offer.errorMsg ? (
-                <OfferDataContainer>
-                  <OfferDataInfoLabel>
-                    {t('Error: ') + offer.errorMsg}
-                  </OfferDataInfoLabel>
-                </OfferDataContainer>
-              ) : null}
-              <OfferRow>
-                <OfferDataContainer>
-                  {offer.fiatMoney &&
-                  !offer.errorMsg &&
-                  !offer.outOfLimitMsg ? (
-                    <>
-                      {index === 0 ? (
-                        <BestOfferTagContainer>
-                          <BestOfferTag>
-                            <BestOfferTagText>
-                              {t('Best Offer')}
-                            </BestOfferTagText>
-                          </BestOfferTag>
-                        </BestOfferTagContainer>
-                      ) : null}
-                      <OfferDataCryptoAmount>
-                        {offer.amountReceiving} {coin.toUpperCase()}
-                      </OfferDataCryptoAmount>
-                      {offer.fiatCurrency !== fiatCurrency ? (
-                        <OfferDataWarningContainer>
-                          <OfferDataWarningMsg>
-                            {t(
-                              "This exchange doesn't support purchases with , tap 'Buy' to continue paying in .",
-                              {
-                                altFiatCurrency: fiatCurrency,
-                                availableFiatCurrency: offer.fiatCurrency,
-                              },
-                            )}
-                          </OfferDataWarningMsg>
-                        </OfferDataWarningContainer>
-                      ) : null}
-                    </>
-                  ) : null}
-                  <OfferDataInfoContainer>
-                    <OfferDataInfoLabel>{t('Provided By')}</OfferDataInfoLabel>
-                    {offer.logo}
-                  </OfferDataInfoContainer>
-                </OfferDataContainer>
-                {offer.fiatMoney ? (
-                  <SummaryCtaContainer>
-                    <Button
-                      action={true}
-                      buttonType={'pill'}
-                      onPress={() => {
-                        haptic('impactLight');
-                        goTo(offer.key);
-                      }}>
-                      {t('Buy')}
-                    </Button>
-                  </SummaryCtaContainer>
-                ) : null}
-              </OfferRow>
+              Edit
+            </Button>
+          </SummaryCtaContainer>
+        </SummaryRow>
 
-              {offer.expanded ? (
-                <>
-                  <ItemDivisor style={{marginTop: 20}} />
-                  <OfferExpandibleItem>
-                    <OfferDataInfoLabel>{t('Buy Amount')}</OfferDataInfoLabel>
-                    <OfferDataRightContainer>
+        {Object.values(offers)
+          .sort(
+            (a, b) =>
+              parseFloat(b.amountReceiving || '0') -
+              parseFloat(a.amountReceiving || '0'),
+          )
+          .map((offer: CryptoOffer, index: number) => {
+            return offer.showOffer ? (
+              <BuyCryptoExpandibleCard
+                key={offer.key}
+                onPress={() => {
+                  expandCard(offer);
+                }}>
+                {!offer.fiatMoney && !offer.errorMsg && !offer.outOfLimitMsg ? (
+                  <SpinnerContainer>
+                    <ActivityIndicator color={ProgressBlue} />
+                  </SpinnerContainer>
+                ) : null}
+                {!offer.fiatMoney && offer.outOfLimitMsg ? (
+                  <OfferDataContainer>
+                    <OfferDataInfoLabel>
+                      {offer.outOfLimitMsg}
+                    </OfferDataInfoLabel>
+                  </OfferDataContainer>
+                ) : null}
+                {!offer.fiatMoney && offer.errorMsg ? (
+                  <OfferDataContainer>
+                    <OfferDataInfoLabel>
+                      {t('Error: ') + offer.errorMsg}
+                    </OfferDataInfoLabel>
+                  </OfferDataContainer>
+                ) : null}
+                <OfferRow>
+                  <OfferDataContainer>
+                    {offer.fiatMoney &&
+                    !offer.errorMsg &&
+                    !offer.outOfLimitMsg ? (
+                      <>
+                        {index === 0 ? (
+                          <BestOfferTagContainer>
+                            <BestOfferTag>
+                              <BestOfferTagText>
+                                {t('Best Offer')}
+                              </BestOfferTagText>
+                            </BestOfferTag>
+                          </BestOfferTagContainer>
+                        ) : null}
+                        <OfferDataCryptoAmount>
+                          {Number(offer.amountReceiving)
+                            .toFixed(8)
+                            .replace(/\.?0+$/, '')}{' '}
+                          {coin.toUpperCase()}
+                        </OfferDataCryptoAmount>
+                        {offer.fiatCurrency !== fiatCurrency ? (
+                          <OfferDataWarningContainer>
+                            <OfferDataWarningMsg>
+                              {t(
+                                "This exchange doesn't support purchases with , tap 'Buy' to continue paying in .",
+                                {
+                                  altFiatCurrency: fiatCurrency,
+                                  availableFiatCurrency: offer.fiatCurrency,
+                                },
+                              )}
+                            </OfferDataWarningMsg>
+                          </OfferDataWarningContainer>
+                        ) : null}
+                      </>
+                    ) : null}
+                    <OfferDataInfoContainer>
+                      <OfferDataInfoLabel>
+                        {t('Provided By')}
+                      </OfferDataInfoLabel>
+                      {offer.logo}
+                    </OfferDataInfoContainer>
+                  </OfferDataContainer>
+                  {offer.fiatMoney ? (
+                    <SummaryCtaContainer>
+                      <Button
+                        action={true}
+                        buttonType={'pill'}
+                        disabled={openingBrowser}
+                        onPress={() => {
+                          haptic('impactLight');
+                          offer.buyClicked = true;
+                          setOpeningBrowser(true);
+                          goTo(offer.key);
+                        }}>
+                        {offer.buyClicked ? (
+                          <ActivityIndicator
+                            style={{marginBottom: -5}}
+                            color={White}
+                          />
+                        ) : (
+                          t('Buy')
+                        )}
+                      </Button>
+                    </SummaryCtaContainer>
+                  ) : null}
+                </OfferRow>
+
+                {offer.expanded ? (
+                  <>
+                    <ItemDivisor style={{marginTop: 20}} />
+                    <OfferExpandibleItem>
+                      <OfferDataInfoLabel>{t('Buy Amount')}</OfferDataInfoLabel>
+                      <OfferDataRightContainer>
+                        <OfferDataInfoText>
+                          {formatFiatAmount(
+                            Number(offer.buyAmount),
+                            offer.fiatCurrency,
+                          )}
+                        </OfferDataInfoText>
+                        <OfferDataInfoTextSec>
+                          {Number(offer.amountReceiving).toFixed(6)}{' '}
+                          {coin.toUpperCase()}
+                        </OfferDataInfoTextSec>
+                      </OfferDataRightContainer>
+                    </OfferExpandibleItem>
+                    <ItemDivisor />
+                    <OfferExpandibleItem>
+                      <OfferDataInfoLabel>{t('Fee')}</OfferDataInfoLabel>
                       <OfferDataInfoText>
                         {formatFiatAmount(
-                          Number(offer.buyAmount),
+                          Number(offer.fee),
                           offer.fiatCurrency,
                         )}
                       </OfferDataInfoText>
-                      <OfferDataInfoTextSec>
-                        {Number(offer.amountReceiving).toFixed(6)}{' '}
-                        {coin.toUpperCase()}
-                      </OfferDataInfoTextSec>
-                    </OfferDataRightContainer>
-                  </OfferExpandibleItem>
-                  <ItemDivisor />
-                  <OfferExpandibleItem>
-                    <OfferDataInfoLabel>{t('Fee')}</OfferDataInfoLabel>
-                    <OfferDataInfoText>
-                      {formatFiatAmount(Number(offer.fee), offer.fiatCurrency)}
-                    </OfferDataInfoText>
-                  </OfferExpandibleItem>
-                  <ItemDivisor />
-                  <OfferExpandibleItem>
-                    <OfferDataInfoTotal>{t('TOTAL')}</OfferDataInfoTotal>
-                    <OfferDataInfoTotal>
-                      {formatFiatAmount(
-                        Number(offer.amountCost),
-                        offer.fiatCurrency,
-                        {customPrecision: 'minimal'},
-                      )}
-                    </OfferDataInfoTotal>
-                  </OfferExpandibleItem>
-                  {offer.key == 'banxa' ? (
-                    <BanxaTerms
-                      paymentMethod={paymentMethod}
-                      country={country}
-                    />
-                  ) : null}
-                  {offer.key == 'moonpay' ? (
-                    <MoonpayTerms
-                      paymentMethod={paymentMethod}
-                      country={country}
-                    />
-                  ) : null}
-                  {offer.key == 'ramp' ? (
-                    <RampTerms
-                      paymentMethod={paymentMethod}
-                      country={country}
-                    />
-                  ) : null}
-                  {offer.key == 'sardine' ? (
-                    <SardineTerms quoteData={offer.quoteData} />
-                  ) : null}
-                  {offer.key == 'simplex' ? (
-                    <SimplexTerms paymentMethod={paymentMethod} />
-                  ) : null}
-                </>
-              ) : null}
-            </BuyCryptoExpandibleCard>
-          ) : null;
-        })}
+                    </OfferExpandibleItem>
+                    <ItemDivisor />
+                    <OfferExpandibleItem>
+                      <OfferDataInfoTotal>{t('TOTAL')}</OfferDataInfoTotal>
+                      <OfferDataInfoTotal>
+                        {formatFiatAmount(
+                          Number(offer.amountCost),
+                          offer.fiatCurrency,
+                          {customPrecision: 'minimal'},
+                        )}
+                      </OfferDataInfoTotal>
+                    </OfferExpandibleItem>
+                    {offer.key == 'banxa' ? (
+                      <BanxaTerms
+                        paymentMethod={paymentMethod}
+                        country={country}
+                      />
+                    ) : null}
+                    {offer.key == 'moonpay' ? (
+                      <MoonpayTerms
+                        paymentMethod={paymentMethod}
+                        country={country}
+                      />
+                    ) : null}
+                    {offer.key == 'ramp' ? (
+                      <RampTerms
+                        paymentMethod={paymentMethod}
+                        country={country}
+                      />
+                    ) : null}
+                    {offer.key == 'sardine' ? (
+                      <SardineTerms quoteData={offer.quoteData} />
+                    ) : null}
+                    {offer.key == 'simplex' ? (
+                      <SimplexTerms paymentMethod={paymentMethod} />
+                    ) : null}
+                  </>
+                ) : null}
+              </BuyCryptoExpandibleCard>
+            ) : null;
+          })}
 
-      <TermsContainer>
-        <TermsText>
-          {t(
-            'The final crypto amount you receive when the transaction is complete may differ because it is based on the exchange rates of the providers.',
-          )}
-        </TermsText>
-        <TermsText>{t('Additional third-party fees may apply.')}</TermsText>
-      </TermsContainer>
-    </ScrollView>
+        <TermsContainer>
+          <TermsText>
+            {t(
+              'The final crypto amount you receive when the transaction is complete may differ because it is based on the exchange rates of the providers.',
+            )}
+          </TermsText>
+          <TermsText>{t('Additional third-party fees may apply.')}</TermsText>
+        </TermsContainer>
+      </ScrollView>
+    </BuyCryptoOffersContainer>
   );
 };
 

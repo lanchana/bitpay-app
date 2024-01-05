@@ -1,5 +1,5 @@
 import {useNavigation, useTheme} from '@react-navigation/native';
-import {StackScreenProps} from '@react-navigation/stack';
+import {NativeStackScreenProps} from '@react-navigation/native-stack';
 import i18next from 'i18next';
 import _ from 'lodash';
 import React, {
@@ -57,6 +57,7 @@ import {
   White,
 } from '../../../styles/colors';
 import {
+  formatCurrencyAbbreviation,
   getProtocolName,
   shouldScale,
   sleep,
@@ -76,7 +77,7 @@ import OptionsSheet, {Option} from '../components/OptionsSheet';
 import ReceiveAddress from '../components/ReceiveAddress';
 import BalanceDetailsModal from '../components/BalanceDetailsModal';
 import Icons from '../components/WalletIcons';
-import {WalletScreens, WalletStackParamList} from '../WalletStack';
+import {WalletScreens, WalletGroupParamList} from '../WalletGroup';
 import {buildUIFormattedWallet} from './KeyOverview';
 import {useAppDispatch, useAppSelector} from '../../../utils/hooks';
 import {getPriceHistory, startGetRates} from '../../../store/wallet/effects';
@@ -134,14 +135,13 @@ export type WalletDetailsScreenParamList = {
   skipInitializeHistory?: boolean;
 };
 
-type WalletDetailsScreenProps = StackScreenProps<
-  WalletStackParamList,
+type WalletDetailsScreenProps = NativeStackScreenProps<
+  WalletGroupParamList,
   'WalletDetails'
 >;
 
-const WalletDetailsContainer = styled.View`
+const WalletDetailsContainer = styled.SafeAreaView`
   flex: 1;
-  padding-top: 10px;
 `;
 
 const HeaderContainer = styled.View`
@@ -317,7 +317,7 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
   useLayoutEffect(() => {
     navigation.setOptions({
       headerTitle: () => (
-        <>
+        <View style={{height: 'auto'}}>
           <HeaderSubTitleContainer>
             <KeySvg width={10} height={10} />
             <HeaderKeyName>{key.keyName}</HeaderKeyName>
@@ -325,7 +325,7 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
           <HeaderTitle style={{textAlign: 'center'}}>
             {uiFormattedWallet.walletName}
           </HeaderTitle>
-        </>
+        </View>
       ),
       headerRight: () => (
         <Settings
@@ -378,22 +378,20 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
       description: t(
         'This will generate an invoice, which the person you send it to can pay using any wallet.',
       ),
-      onPress: () => {
-        navigation.navigate('Wallet', {
-          screen: WalletScreens.AMOUNT,
-          params: {
-            cryptoCurrencyAbbreviation:
-              fullWalletObj.currencyAbbreviation.toUpperCase(),
-            chain: fullWalletObj.chain,
-            onAmountSelected: async (amount, setButtonState) => {
-              setButtonState('success');
-              await sleep(500);
-              navigation.navigate('Wallet', {
-                screen: 'RequestSpecificAmountQR',
-                params: {wallet: fullWalletObj, requestAmount: Number(amount)},
-              });
-              sleep(300).then(() => setButtonState(null));
-            },
+      onPress: async () => {
+        await sleep(500);
+        navigation.navigate(WalletScreens.AMOUNT, {
+          cryptoCurrencyAbbreviation: fullWalletObj.currencyAbbreviation,
+          chain: fullWalletObj.chain,
+          tokenAddress: fullWalletObj.tokenAddress,
+          onAmountSelected: async (amount, setButtonState) => {
+            setButtonState('success');
+            await sleep(500);
+            navigation.navigate('RequestSpecificAmountQR', {
+              wallet: fullWalletObj,
+              requestAmount: Number(amount),
+            });
+            sleep(300).then(() => setButtonState(null));
           },
         });
       },
@@ -410,14 +408,13 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
       img: <Icons.Settings />,
       title: t('Wallet Settings'),
       description: t('View all the ways to manage and configure your wallet.'),
-      onPress: () =>
-        navigation.navigate('Wallet', {
-          screen: 'WalletSettings',
-          params: {
-            key,
-            walletId,
-          },
-        }),
+      onPress: async () => {
+        await sleep(500);
+        navigation.navigate('WalletSettings', {
+          key,
+          walletId,
+        });
+      },
     },
   ]);
 
@@ -452,6 +449,7 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
     fiatSpendableBalance,
     currencyAbbreviation,
     chain,
+    tokenAddress,
     network,
     pendingTxps,
   } = uiFormattedWallet;
@@ -470,8 +468,6 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
   const [errorLoadingTxs, setErrorLoadingTxs] = useState<boolean>();
   const [needActionPendingTxps, setNeedActionPendingTxps] = useState<any[]>([]);
   const [needActionUnsentTxps, setNeedActionUnsentTxps] = useState<any[]>([]);
-  const [onEndReachedCalledDuringLoading, setOnEndReachedCalledDuringLoading] =
-    useState<boolean>(true);
 
   const setNeedActionTxps = (pendingTxps: TransactionProposal[]) => {
     const txpsPending: TransactionProposal[] = [];
@@ -481,6 +477,7 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
       currencyAbbreviation,
       chain,
       [],
+      tokenAddress,
     );
     formattedPendingTxps.forEach((txp: any) => {
       const action: any = _.find(txp.actions, {
@@ -616,9 +613,10 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
 
   const goToTransactionDetails = (transaction: any) => {
     const onMemoChange = () => loadHistory(true);
-    navigation.navigate('Wallet', {
-      screen: 'TransactionDetails',
-      params: {wallet: fullWalletObj, transaction, onMemoChange},
+    navigation.navigate('TransactionDetails', {
+      wallet: fullWalletObj,
+      transaction,
+      onMemoChange,
     });
   };
 
@@ -691,16 +689,13 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
         createProposalAndBuildTxDetails(tx),
       );
 
-      navigation.navigate('Wallet', {
-        screen: 'Confirm',
-        params: {
-          wallet: fullWalletObj,
-          recipient,
-          txp: newTxp,
-          txDetails,
-          amount,
-          speedup: true,
-        },
+      navigation.navigate('Confirm', {
+        wallet: fullWalletObj,
+        recipient,
+        txp: newTxp,
+        txDetails,
+        amount,
+        speedup: true,
       });
     } catch (err: any) {
       const [errorMessageConfig] = await Promise.all([
@@ -848,13 +843,10 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
 
   const onPressTxp = useMemo(
     () => (transaction: any) => {
-      navigation.navigate('Wallet', {
-        screen: 'TransactionProposalDetails',
-        params: {
-          walletId: fullWalletObj.id,
-          transactionId: transaction.id,
-          keyId: key.id,
-        },
+      navigation.navigate('TransactionProposalDetails', {
+        walletId: fullWalletObj.id,
+        transactionId: transaction.id,
+        keyId: key.id,
       });
     },
     [],
@@ -862,9 +854,8 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
 
   const onPressTxpBadge = useMemo(
     () => () => {
-      navigation.navigate('Wallet', {
-        screen: 'TransactionProposalNotifications',
-        params: {walletId: fullWalletObj.credentials.walletId},
+      navigation.navigate('TransactionProposalNotifications', {
+        walletId: fullWalletObj.credentials.walletId,
       });
     },
     [],
@@ -901,7 +892,6 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
         description={item.uiDescription}
         time={item.uiTime}
         value={item.uiValue}
-        RBFInfo={{isRBF: item.isRBF, isReceived: IsReceived(item.action)}}
         onPressTransaction={() => onPressTransaction(item)}
       />
     );
@@ -918,6 +908,7 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
         onPressTransaction={() => onPressTxp(item)}
         recipientCount={item.recipientCount}
         toAddress={item.toAddress}
+        tokenAddress={item.tokenAddress}
         chain={item.chain}
         contactList={contactList}
       />
@@ -960,7 +951,8 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
                     <Row>
                       {!hideAllBalances ? (
                         <Balance scale={shouldScale(cryptoBalance)}>
-                          {cryptoBalance} {currencyAbbreviation}
+                          {cryptoBalance}{' '}
+                          {formatCurrencyAbbreviation(currencyAbbreviation)}
                         </Balance>
                       ) : (
                         <H2>****</H2>
@@ -982,7 +974,8 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
                       />
                       <Small>
                         <Text style={{fontWeight: 'bold'}}>
-                          {cryptoSpendableBalance} {currencyAbbreviation}
+                          {cryptoSpendableBalance}{' '}
+                          {formatCurrencyAbbreviation(currencyAbbreviation)}
                         </Text>
                         {showFiatBalance && (
                           <Text> ({fiatSpendableBalance})</Text>
@@ -1049,20 +1042,14 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
                             chain: fullWalletObj.chain || '',
                           }),
                         );
-                        navigation.navigate('Wallet', {
-                          screen: WalletScreens.AMOUNT,
-                          params: {
-                            onAmountSelected: async (amount: string) => {
-                              navigation.navigate('BuyCrypto', {
-                                screen: 'BuyCryptoRoot',
-                                params: {
-                                  amount: Number(amount),
-                                  fromWallet: fullWalletObj,
-                                },
-                              });
-                            },
-                            context: 'buyCrypto',
+                        navigation.navigate(WalletScreens.AMOUNT, {
+                          onAmountSelected: async (amount: string) => {
+                            navigation.navigate('BuyCryptoRoot', {
+                              amount: Number(amount),
+                              fromWallet: fullWalletObj,
+                            });
                           },
+                          context: 'buyCrypto',
                         });
                       },
                     }}
@@ -1081,11 +1068,8 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
                             chain: fullWalletObj.chain || '',
                           }),
                         );
-                        navigation.navigate('SwapCrypto', {
-                          screen: 'Root',
-                          params: {
-                            selectedWallet: fullWalletObj,
-                          },
+                        navigation.navigate('SwapCryptoRoot', {
+                          selectedWallet: fullWalletObj,
                         });
                       },
                     }}
@@ -1109,10 +1093,7 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
                             coin: fullWalletObj.currencyAbbreviation,
                           }),
                         );
-                        navigation.navigate('Wallet', {
-                          screen: 'SendTo',
-                          params: {wallet: fullWalletObj},
-                        });
+                        navigation.navigate('SendTo', {wallet: fullWalletObj});
                       },
                     }}
                   />
@@ -1165,7 +1146,8 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
 
                   <TailContainer>
                     <Value>
-                      {cryptoLockedBalance} {currencyAbbreviation}
+                      {cryptoLockedBalance}{' '}
+                      {formatCurrencyAbbreviation(currencyAbbreviation)}
                     </Value>
                     <Fiat>
                       {network === 'testnet'
@@ -1195,15 +1177,9 @@ const WalletDetails: React.FC<WalletDetailsScreenProps> = ({route}) => {
         ItemSeparatorComponent={() => <BorderBottom />}
         ListFooterComponent={listFooterComponent}
         onEndReached={() => {
-          if (!onEndReachedCalledDuringLoading) {
-            loadHistory();
-            setOnEndReachedCalledDuringLoading(true);
-          }
+          loadHistory();
         }}
         onEndReachedThreshold={0.5}
-        onMomentumScrollBegin={() => {
-          setOnEndReachedCalledDuringLoading(false);
-        }}
         ListEmptyComponent={listEmptyComponent}
         maxToRenderPerBatch={15}
         getItemLayout={getItemLayout}

@@ -62,6 +62,11 @@ export interface CommonCardConfig {
 export interface CardConfig extends CommonCardConfig {
   name: string;
   supportedAmounts?: number[];
+  amountSpecificConfig?: {
+    [amount: number]: {
+      cardImage: string;
+    };
+  };
 }
 
 export interface UnsoldGiftCard {
@@ -264,6 +269,8 @@ export interface BillPayAccount {
   status: string;
   type: 'liability';
   isPayable: boolean;
+  isManuallyAdded: boolean;
+  paymentStatus: 'active' | 'activating' | 'unavailable';
   liability: {
     merchantId: string;
     merchantIcon: string;

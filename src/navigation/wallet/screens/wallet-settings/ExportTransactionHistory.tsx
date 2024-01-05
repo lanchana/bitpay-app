@@ -9,7 +9,7 @@ import {
   GetTransactionHistory,
 } from '../../../../store/wallet/effects/transactions/transactions';
 import {useAppDispatch} from '../../../../utils/hooks';
-import {WalletStackParamList} from '../../WalletStack';
+import {WalletGroupParamList} from '../../WalletGroup';
 import _ from 'lodash';
 import {APP_NAME_UPPERCASE} from '../../../../constants/config';
 import {GetPrecision} from '../../../../store/wallet/utils/currency';
@@ -18,7 +18,10 @@ import {PermissionsAndroid, Platform} from 'react-native';
 import Share, {ShareOptions} from 'react-native-share';
 import Papa from 'papaparse';
 import {BottomNotificationConfig} from '../../../../components/modal/bottom-notification/BottomNotification';
-import {sleep} from '../../../../utils/helper-methods';
+import {
+  formatCurrencyAbbreviation,
+  sleep,
+} from '../../../../utils/helper-methods';
 import {
   dismissOnGoingProcessModal,
   showBottomNotificationModal,
@@ -54,8 +57,8 @@ const ExportTransactionHistory = () => {
   const dispatch = useAppDispatch();
   const {
     params: {wallet},
-  } = useRoute<RouteProp<WalletStackParamList, 'ExportTransactionHistory'>>();
-  const {currencyAbbreviation, chain, walletName} = wallet;
+  } = useRoute<RouteProp<WalletGroupParamList, 'ExportTransactionHistory'>>();
+  const {currencyAbbreviation, chain, walletName, tokenAddress} = wallet;
 
   const formatDate = (date: number): string => {
     const dateObj = new Date(date);
@@ -130,7 +133,7 @@ const ExportTransactionHistory = () => {
 
       // @ts-ignore
       const {unitToSatoshi} = dispatch(
-        GetPrecision(currencyAbbreviation, chain),
+        GetPrecision(currencyAbbreviation, chain, tokenAddress),
       );
       const satToUnit = 1 / unitToSatoshi;
 
@@ -168,7 +171,7 @@ const ExportTransactionHistory = () => {
           Destination: tx.addressTo || '',
           Description: _note,
           Amount: _amount,
-          Currency: currencyAbbreviation.toUpperCase(),
+          Currency: formatCurrencyAbbreviation(currencyAbbreviation),
           Txid: tx.txid,
           Creator: _creator,
           Copayers: _copayers,
@@ -233,7 +236,7 @@ const ExportTransactionHistory = () => {
 
   const shareFile = async (csv: any, option: string) => {
     try {
-      if (Platform.OS === 'android') {
+      if (Platform.OS === 'android' && Platform.Version < 30) {
         await isAndroidStoragePermissionGranted();
       }
       const rootPath =
@@ -273,9 +276,10 @@ const ExportTransactionHistory = () => {
     try {
       dispatch(startOnGoingProcessModal('LOADING'));
       const csv = await buildCVSFile();
-      await shareFile(csv, option);
+      await sleep(200);
       dispatch(dismissOnGoingProcessModal());
       await sleep(500);
+      await shareFile(csv, option);
     } catch (e) {
       dispatch(dismissOnGoingProcessModal());
       await sleep(500);

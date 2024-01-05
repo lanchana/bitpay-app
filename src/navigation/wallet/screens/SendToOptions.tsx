@@ -5,7 +5,7 @@ import {ScreenOptions} from '../../../styles/tabNavigator';
 import {H5, H7, HeaderTitle} from '../../../components/styled/Text';
 import {RouteProp, useNavigation, useRoute} from '@react-navigation/native';
 import {useTranslation} from 'react-i18next';
-import {WalletStackParamList} from '../WalletStack';
+import {WalletGroupParamList} from '../WalletGroup';
 import SendToAddress from '../components/SendToAddress';
 import SendToContact from '../components/SendToContact';
 import {
@@ -24,7 +24,7 @@ import {
   createProposalAndBuildTxDetails,
   handleCreateTxProposalError,
 } from '../../../store/wallet/effects/send/send';
-import {sleep} from '../../../utils/helper-methods';
+import {formatCurrencyAbbreviation, sleep} from '../../../utils/helper-methods';
 import {
   dismissOnGoingProcessModal,
   showBottomNotificationModal,
@@ -110,7 +110,7 @@ export const RecipientList: React.FC<RecipientListProps> = ({
               <H5>
                 {recipient.amount +
                   ' ' +
-                  wallet.currencyAbbreviation.toUpperCase()}
+                  formatCurrencyAbbreviation(wallet.currencyAbbreviation)}
               </H5>
             </TouchableOpacity>
           ) : null}
@@ -161,7 +161,7 @@ const SendToOptions = () => {
   const dispatch = useAppDispatch();
   const Tab = createMaterialTopTabNavigator();
   const navigation = useNavigation();
-  const {params} = useRoute<RouteProp<WalletStackParamList, 'SendToOptions'>>();
+  const {params} = useRoute<RouteProp<WalletGroupParamList, 'SendToOptions'>>();
   const {wallet} = params;
   const [recipientList, setRecipientList] = useState<Recipient[]>([]);
   const [recipientAmount, setRecipientAmount] = useState<{
@@ -217,16 +217,13 @@ const SendToOptions = () => {
       )) as any;
       dispatch(dismissOnGoingProcessModal());
       await sleep(500);
-      navigation.navigate('Wallet', {
-        screen: 'Confirm',
-        params: {
-          wallet,
-          recipient: recipientList[0],
-          recipientList,
-          txp,
-          txDetails,
-          amount,
-        },
+      navigation.navigate('Confirm', {
+        wallet,
+        recipient: recipientList[0],
+        recipientList,
+        txp,
+        txDetails,
+        amount,
       });
     } catch (err: any) {
       const errorMessageConfig = (
@@ -260,12 +257,9 @@ const SendToOptions = () => {
   }, [navigation, t, params.title]);
 
   const goToSelectInputsView = (recipient: Recipient) => {
-    navigation.navigate('Wallet', {
-      screen: 'SelectInputs',
-      params: {
-        recipient,
-        wallet,
-      },
+    navigation.navigate('SelectInputs', {
+      recipient,
+      wallet,
     });
   };
 
@@ -295,7 +289,7 @@ const SendToOptions = () => {
 
       <AmountModal
         isVisible={recipientAmount.showModal}
-        cryptoCurrencyAbbreviation={params.wallet.currencyAbbreviation.toUpperCase()}
+        cryptoCurrencyAbbreviation={params.wallet.currencyAbbreviation}
         chain={params.wallet.chain}
         onClose={() => {
           setRecipientAmount({showModal: false});

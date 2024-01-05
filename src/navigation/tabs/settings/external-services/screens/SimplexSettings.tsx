@@ -89,11 +89,8 @@ const SimplexSettings: React.FC = () => {
                     key={pr.payment_id}
                     onPress={() => {
                       haptic('impactLight');
-                      navigation.navigate('ExternalServicesSettings', {
-                        screen: 'SimplexDetails',
-                        params: {
-                          paymentRequest: pr,
-                        },
+                      navigation.navigate('SimplexDetails', {
+                        paymentRequest: pr,
                       });
                     }}>
                     <PrRowLeft>
@@ -133,7 +130,7 @@ const SimplexSettings: React.FC = () => {
         </Settings>
       </SettingsContainer>
       <FooterSupport>
-        <SupportTxt>Having problems with Simplex?</SupportTxt>
+        <SupportTxt>{t('Having problems with Simplex?')}</SupportTxt>
         <TouchableOpacity
           onPress={() => {
             haptic('impactLight');

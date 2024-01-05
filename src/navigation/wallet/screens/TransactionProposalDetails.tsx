@@ -8,7 +8,7 @@ import {
 import React, {useCallback, useEffect, useLayoutEffect, useState} from 'react';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import {RouteProp} from '@react-navigation/core';
-import {WalletStackParamList} from '../WalletStack';
+import {WalletGroupParamList} from '../WalletGroup';
 import {useAppDispatch, useLogger, useAppSelector} from '../../../utils/hooks';
 import {
   buildTransactionDetails,
@@ -207,7 +207,7 @@ const TransactionProposalDetails = () => {
   const navigation = useNavigation();
   const {
     params: {transactionId, walletId, keyId},
-  } = useRoute<RouteProp<WalletStackParamList, 'TransactionProposalDetails'>>();
+  } = useRoute<RouteProp<WalletGroupParamList, 'TransactionProposalDetails'>>();
   const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
   const key = useAppSelector(({WALLET}) => WALLET.keys[keyId]) as Key;
   const wallet = findWalletById(key.wallets, walletId) as Wallet;
@@ -223,7 +223,7 @@ const TransactionProposalDetails = () => {
   const [lastSigner, setLastSigner] = useState(false);
 
   const title = getDetailsTitle(transaction, wallet);
-  let {currencyAbbreviation, chain, network} = wallet;
+  let {currencyAbbreviation, chain, network, tokenAddress} = wallet;
   currencyAbbreviation = currencyAbbreviation.toLowerCase();
   const isTestnet = network === 'testnet';
 
@@ -498,7 +498,7 @@ const TransactionProposalDetails = () => {
               <H2 medium={true}>{txp.amountStr}</H2>
             ) : null}
 
-            {!IsCustomERCToken(currencyAbbreviation, chain) ? (
+            {!IsCustomERCToken(tokenAddress, chain) ? (
               <SubTitle>
                 {!txp.fiatRateStr
                   ? '...'
@@ -617,7 +617,11 @@ const TransactionProposalDetails = () => {
                       <H7>
                         {txp.feeFiatStr}{' '}
                         {txp.feeRateStr
-                          ? '(' + txp.feeRateStr + t(' of total amount') + ')'
+                          ? '(' +
+                            txp.feeRateStr +
+                            ' ' +
+                            t('of total amount') +
+                            ')'
                           : null}
                       </H7>
                     ) : (
@@ -647,7 +651,7 @@ const TransactionProposalDetails = () => {
               hr
             />
           ) : (
-            <MultipleOutputsTx tx={txp} />
+            <MultipleOutputsTx tx={txp} tokenAddress={wallet.tokenAddress} />
           )}
 
           <>

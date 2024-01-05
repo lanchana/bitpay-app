@@ -68,8 +68,7 @@ export enum evmAvgTime {
 const TxSpeedContainer = styled(SheetContainer)`
   flex: 1;
   justify-content: flex-start;
-  margin-top: 0;
-  padding: 0 0 20px 0;
+  padding: 0;
 `;
 
 const TxSpeedScroll = styled(KeyboardAwareScrollView)`
@@ -154,7 +153,7 @@ export const FeeLevelStepTopLabel = styled(H7)<{length: number}>`
 `;
 
 const TxSpeedParagraph = styled(Paragraph)`
-  margin: 0 ${ScreenGutter} ${ScreenGutter};
+  margin: 0 ${ScreenGutter};
   color: ${({theme: {dark}}) => (dark ? White : SlateDark)};
 `;
 
@@ -196,9 +195,7 @@ const TransactionLevel = ({
   const theme = useTheme();
 
   const [speedUpMinFeePerKb, setSpeedUpMinFeePerKb] = useState<number>();
-  const {feeUnit, feeUnitAmount, blockTime} = dispatch(
-    GetFeeUnits(currencyAbbreviation, chain),
-  );
+  const {feeUnit, feeUnitAmount, blockTime} = GetFeeUnits(chain);
   const [feeOptions, setFeeOptions] = useState<any[]>();
   const [feePerSatByte, setFeePerSatByte] = useState<
     number | string | undefined
@@ -214,7 +211,7 @@ const TransactionLevel = ({
   const minFeeAllowed = FEE_MIN;
   const [maxFeeAllowed, setMaxFeeAllowed] = useState<number>();
 
-  const {coinColor: backgroundColor} = GetTheme(currencyAbbreviation)!;
+  const {coinColor: backgroundColor} = GetTheme(chain)!;
   const themedBackground = theme.dark ? '#464646' : NeutralSlate;
 
   const setSpeedUpMinFee = (_feeLevels: Fee[]): number | undefined => {
@@ -466,6 +463,7 @@ const TransactionLevel = ({
           keyboardShouldPersistTaps={'handled'}>
           <SheetHeaderContainer style={{marginTop: insets.top}}>
             <TouchableOpacity
+              style={{marginLeft: 15}}
               activeOpacity={ActiveOpacity}
               onPress={() => onClose()}>
               <Back opacity={1} background={themedBackground} />
@@ -604,7 +602,8 @@ const TransactionLevel = ({
                       ) : null}
                       {error === 'showMaxWarning' ? (
                         <ErrorText>
-                          {t('Fee should not be higher than ') +
+                          {t('Fee should not be higher than') +
+                            ' ' +
                             maxFeeRecommended +
                             ' ' +
                             feeUnit +
@@ -613,7 +612,8 @@ const TransactionLevel = ({
                       ) : null}
                       {error === 'showMinError' ? (
                         <ErrorText>
-                          {t('Fee should be higher than ') +
+                          {t('Fee should be higher than') +
+                            ' ' +
                             minFeeAllowed +
                             ' ' +
                             feeUnit +
@@ -622,7 +622,8 @@ const TransactionLevel = ({
                       ) : null}
                       {error === 'showMaxError' ? (
                         <ErrorText>
-                          {t('Fee Should be lesser than ') +
+                          {t('Fee Should be lesser than') +
+                            ' ' +
                             maxFeeAllowed +
                             ' ' +
                             feeUnit +

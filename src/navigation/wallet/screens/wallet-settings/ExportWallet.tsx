@@ -24,13 +24,13 @@ import ChevronUpSvg from '../../../../../assets/img/chevron-up.svg';
 import ChevronDownSvg from '../../../../../assets/img/chevron-down.svg';
 import Checkbox from '../../../../components/checkbox/Checkbox';
 import {RouteProp} from '@react-navigation/core';
-import {WalletStackParamList} from '../../WalletStack';
+import {WalletGroupParamList} from '../../WalletGroup';
 import {BwcProvider} from '../../../../lib/bwc';
 import Clipboard from '@react-native-clipboard/clipboard';
 import {sleep} from '../../../../utils/helper-methods';
-import {Linking} from 'react-native';
 import {useTranslation} from 'react-i18next';
 import {LogActions} from '../../../../store/log';
+import Mailer from 'react-native-mail';
 
 const BWC = BwcProvider.getInstance();
 
@@ -90,7 +90,7 @@ const ExportWallet = () => {
   const {t} = useTranslation();
   const {
     params: {wallet, keyObj},
-  } = useRoute<RouteProp<WalletStackParamList, 'ExportWallet'>>();
+  } = useRoute<RouteProp<WalletGroupParamList, 'ExportWallet'>>();
 
   const {network} = wallet;
 
@@ -174,6 +174,24 @@ const ExportWallet = () => {
     }
   };
 
+  const handleEmail = (subject: string, body: string) => {
+    Mailer.mail(
+      {
+        subject,
+        body,
+        isHTML: false,
+      },
+      (error, event) => {
+        if (error) {
+          dispatch(LogActions.error('Error sending email: ' + error));
+        }
+        if (event) {
+          dispatch(LogActions.debug('Email Backup: ' + event));
+        }
+      },
+    );
+  };
+
   const onSendByEmail = async ({password}: {password: string}) => {
     try {
       setSendButtonState('loading');
@@ -185,7 +203,7 @@ const ExportWallet = () => {
       let name = walletName || cWalletName || walletId;
 
       if (dontIncludePrivateKey) {
-        name = name + t(' (No Private Key)');
+        name = name + ' ' + t('(No Private Key)');
       }
 
       // TODO: Update app name
@@ -195,8 +213,7 @@ const ExportWallet = () => {
         {name, sendWallet: _sendWallet},
       );
 
-      // Works only on device
-      await Linking.openURL(`mailto:?subject=${subject}&body=${body}`);
+      handleEmail(subject, body);
 
       setSendButtonState('success');
       await sleep(200);

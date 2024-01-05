@@ -19,7 +19,7 @@ import {
   ListItemSubText,
 } from '../../../components/styled/Text';
 import {useAppDispatch, useAppSelector} from '../../../utils/hooks';
-import {WalletStackParamList} from '../WalletStack';
+import {WalletGroupParamList} from '../WalletGroup';
 import React, {
   useCallback,
   useEffect,
@@ -36,7 +36,7 @@ import {
 import {RefreshControl, SectionList, View} from 'react-native';
 import TransactionProposalRow from '../../../components/list/TransactionProposalRow';
 import {Air, LightBlack, SlateDark, White} from '../../../styles/colors';
-import {sleep} from '../../../utils/helper-methods';
+import {formatCurrencyAbbreviation, sleep} from '../../../utils/helper-methods';
 import {TRANSACTION_ROW_HEIGHT} from '../../../components/list/TransactionRow';
 import {findWalletById} from '../../../store/wallet/utils/wallet';
 import {useTranslation} from 'react-i18next';
@@ -111,7 +111,7 @@ const TransactionProposalNotifications = () => {
     params: {walletId, keyId},
   } =
     useRoute<
-      RouteProp<WalletStackParamList, 'TransactionProposalNotifications'>
+      RouteProp<WalletGroupParamList, 'TransactionProposalNotifications'>
     >();
   const {t} = useTranslation();
   const navigation = useNavigation();
@@ -294,13 +294,10 @@ const TransactionProposalNotifications = () => {
   const onPressTxp = useMemo(
     () => (transaction: TransactionProposal, fullWalletObj: Wallet) => {
       const key = keys[fullWalletObj.keyId];
-      navigation.navigate('Wallet', {
-        screen: 'TransactionProposalDetails',
-        params: {
-          walletId: fullWalletObj.id,
-          transactionId: transaction.id,
-          keyId: key.id,
-        },
+      navigation.navigate('TransactionProposalDetails', {
+        walletId: fullWalletObj.id,
+        transactionId: transaction.id,
+        keyId: key.id,
       });
     },
     [keys, navigation],
@@ -404,7 +401,7 @@ const TransactionProposalNotifications = () => {
                 </H5>
               </Row>
               <ListItemSubText>
-                {currencyAbbreviation.toUpperCase()}{' '}
+                {formatCurrencyAbbreviation(currencyAbbreviation)}{' '}
                 {n > 1 ? `- Multisig ${m}/${n}` : null}
                 {keyId === 'readonly' ? '- Read Only' : null}
               </ListItemSubText>
@@ -432,6 +429,7 @@ const TransactionProposalNotifications = () => {
                       hideIcon={true}
                       recipientCount={txp.recipientCount}
                       toAddress={txp.toAddress}
+                      tokenAddress={txp.tokenAddress}
                       chain={txp.chain}
                       contactList={contactList}
                     />

@@ -2,13 +2,14 @@ import {RouteProp, StackActions} from '@react-navigation/core';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import React, {useEffect, useMemo, useState} from 'react';
 import {useTranslation} from 'react-i18next';
-import {WalletScreens, WalletStackParamList} from '../../../WalletStack';
+import {WalletScreens, WalletGroupParamList} from '../../../WalletGroup';
 import {useAppDispatch, useAppSelector} from '../../../../../utils/hooks';
 import SecureLockIcon from '../../../../../../assets/img/secure-lock.svg';
 import {
   Recipient,
   TransactionProposal,
   TxDetails,
+  TxDetailsFee,
   Wallet,
 } from '../../../../../store/wallet/wallet.models';
 import SwipeButton from '../../../../../components/swipe-button/SwipeButton';
@@ -25,6 +26,17 @@ import {sleep} from '../../../../../utils/helper-methods';
 import {startOnGoingProcessModal} from '../../../../../store/app/app.effects';
 import {dismissOnGoingProcessModal} from '../../../../../store/app/app.actions';
 import {BuildPayProWalletSelectorList} from '../../../../../store/wallet/utils/wallet';
+import {GetFeeUnits} from '../../../../../store/wallet/utils/currency';
+import {
+  InfoDescription,
+  InfoHeader,
+  InfoTitle,
+} from '../../../../../components/styled/Text';
+import {
+  Info,
+  InfoImageContainer,
+  InfoTriangle,
+} from '../../../../../components/styled/Containers';
 import {
   Amount,
   ConfirmContainer,
@@ -42,7 +54,10 @@ import {AppActions} from '../../../../../store/app';
 import {CustomErrorMessage} from '../../../components/ErrorMessages';
 import {Analytics} from '../../../../../store/analytics/analytics.effects';
 import {PayProOptions} from '../../../../../store/wallet/effects/paypro/paypro';
-import {GetFeeOptions} from '../../../../../store/wallet/effects/fee/fee';
+import {
+  GetFeeOptions,
+  getFeeRatePerKb,
+} from '../../../../../store/wallet/effects/fee/fee';
 import {WalletRowProps} from '../../../../../components/list/WalletRow';
 import {Invoice} from '../../../../../store/shop/shop.models';
 import {startGetRates} from '../../../../../store/wallet/effects';
@@ -52,6 +67,8 @@ import {
 } from '../../../../../api/coinbase/coinbase.types';
 import {coinbasePayInvoice} from '../../../../../store/coinbase';
 import {Memo} from './Memo';
+import {HIGH_FEE_LIMIT} from '../../../../../constants/wallet';
+import WarningSvg from '../../../../../../assets/img/warning.svg';
 
 export interface PayProConfirmParamList {
   wallet?: Wallet;
@@ -66,7 +83,7 @@ const PayProConfirm = () => {
   const {t} = useTranslation();
   const dispatch = useAppDispatch();
   const navigation = useNavigation();
-  const route = useRoute<RouteProp<WalletStackParamList, 'PayProConfirm'>>();
+  const route = useRoute<RouteProp<WalletGroupParamList, 'PayProConfirm'>>();
   const {
     payProOptions,
     wallet: _wallet,
@@ -92,6 +109,9 @@ const PayProConfirm = () => {
   const {fee, sendingFrom, subTotal, total} = txDetails || {};
   const [resetSwipeButton, setResetSwipeButton] = useState(false);
   const [disableSwipeSendButton, setDisableSwipeSendButton] = useState(false);
+  const [showHighFeeWarningMessage, setShowHighFeeWarningMessage] =
+    useState(false);
+
   const payProHost = payProOptions.payProUrl
     .replace('https://', '')
     .split('/')[0];
@@ -136,6 +156,7 @@ const PayProConfirm = () => {
       setRecipient({address: newTxDetails.sendingTo.recipientAddress} as {
         address: string;
       });
+      checkHighFees(selectedWallet, newTxp, fee);
       dispatch(
         Analytics.track('BitPay App - Start Merchant Purchase', {
           merchantBrand: invoice.merchantName,
@@ -195,7 +216,7 @@ const PayProConfirm = () => {
     const selectedCoinbaseAccount = walletRowProps.coinbaseAccount!;
     try {
       const rates = await dispatch(startGetRates({}));
-      const newTxDetails = dispatch(
+      const newTxDetails = await dispatch(
         buildTxDetails({
           invoice,
           wallet: walletRowProps,
@@ -261,21 +282,18 @@ const PayProConfirm = () => {
   };
 
   const request2FA = async () => {
-    navigation.navigate('Wallet', {
-      screen: WalletScreens.PAY_PRO_CONFIRM_TWO_FACTOR,
-      params: {
-        onSubmit: async twoFactorCode => {
-          try {
-            await sendPayment(twoFactorCode);
-          } catch (error: any) {
-            dispatch(dismissOnGoingProcessModal());
-            const invalid2faMessage = CoinbaseErrorMessages.twoFactorInvalid;
-            error?.message?.includes(invalid2faMessage)
-              ? showError({defaultErrorMessage: invalid2faMessage})
-              : handlePaymentFailure(error);
-            throw error;
-          }
-        },
+    navigation.navigate(WalletScreens.PAY_PRO_CONFIRM_TWO_FACTOR, {
+      onSubmit: async twoFactorCode => {
+        try {
+          await sendPayment(twoFactorCode);
+        } catch (error: any) {
+          dispatch(dismissOnGoingProcessModal());
+          const invalid2faMessage = CoinbaseErrorMessages.twoFactorInvalid;
+          error?.message?.includes(invalid2faMessage)
+            ? showError({defaultErrorMessage: invalid2faMessage})
+            : handlePaymentFailure(error);
+          throw error;
+        }
       },
     });
     await sleep(400);
@@ -307,6 +325,20 @@ const PayProConfirm = () => {
         merchantCurrency: invoice?.currency,
         coin: wallet?.currencyAbbreviation || '',
       }),
+    );
+  };
+
+  const checkHighFees = async (wallet: Wallet, txp: any, fee: TxDetailsFee) => {
+    const {feeUnitAmount} = GetFeeUnits(wallet.chain);
+    let feePerKb: number;
+    if (txp.feePerKb) {
+      feePerKb = txp.feePerKb;
+    } else {
+      feePerKb = await getFeeRatePerKb({wallet, feeLevel: fee.feeLevel});
+    }
+    setShowHighFeeWarningMessage(
+      feePerKb / feeUnitAmount >= HIGH_FEE_LIMIT[wallet.chain] &&
+        txp.amount !== 0,
     );
   };
 
@@ -367,12 +399,35 @@ const PayProConfirm = () => {
                 }}
               />
               {wallet && fee ? (
-                <Fee
-                  fee={fee}
-                  hideFeeOptions
-                  feeOptions={GetFeeOptions(wallet.chain)}
-                  hr
-                />
+                <>
+                  <Fee
+                    fee={fee}
+                    hideFeeOptions
+                    feeOptions={GetFeeOptions(wallet.chain)}
+                    hr={!showHighFeeWarningMessage}
+                  />
+                  {showHighFeeWarningMessage ? (
+                    <>
+                      <Info>
+                        <InfoTriangle />
+                        <InfoHeader>
+                          <InfoImageContainer infoMargin={'0 8px 0 0'}>
+                            <WarningSvg />
+                          </InfoImageContainer>
+
+                          <InfoTitle>
+                            {t('Transaction fees are currently high')}
+                          </InfoTitle>
+                        </InfoHeader>
+                        <InfoDescription>
+                          {t(
+                            'Due to high demand, miner fees are high. Fees are paid to miners who process transactions and are not paid to BitPay.',
+                          )}
+                        </InfoDescription>
+                      </Info>
+                    </>
+                  ) : null}
+                </>
               ) : null}
               <Amount
                 description={'Total'}
@@ -410,19 +465,13 @@ const PayProConfirm = () => {
               navigation.dispatch(StackActions.pop(3));
             }
             coinbaseAccount
-              ? navigation.navigate('Coinbase', {
-                  screen: 'CoinbaseAccount',
-                  params: {
-                    accountId: coinbaseAccount.id,
-                    refresh: true,
-                  },
+              ? navigation.navigate('CoinbaseAccount', {
+                  accountId: coinbaseAccount.id,
+                  refresh: true,
                 })
-              : navigation.navigate('Wallet', {
-                  screen: 'WalletDetails',
-                  params: {
-                    walletId: wallet!.id,
-                    key,
-                  },
+              : navigation.navigate('WalletDetails', {
+                  walletId: wallet!.id,
+                  key,
                 });
             await sleep(0);
             setShowPaymentSentModal(false);

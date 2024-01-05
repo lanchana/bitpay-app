@@ -47,6 +47,7 @@ import {
 } from '../../../styles/colors';
 import {
   convertToFiat,
+  formatCurrencyAbbreviation,
   formatFiatAmount,
   shouldScale,
   sleep,
@@ -54,7 +55,7 @@ import {
 import {BalanceUpdateError} from '../components/ErrorMessages';
 import OptionsSheet, {Option} from '../components/OptionsSheet';
 import Icons from '../components/WalletIcons';
-import {WalletStackParamList} from '../WalletStack';
+import {WalletGroupParamList} from '../WalletGroup';
 import ChevronDownSvg from '../../../../assets/img/chevron-down.svg';
 import {
   AppDispatch,
@@ -73,6 +74,9 @@ import {each} from 'lodash';
 import {COINBASE_ENV} from '../../../api/coinbase/coinbase.constants';
 import CoinbaseDropdownOption from '../components/CoinbaseDropdownOption';
 import {Analytics} from '../../../store/analytics/analytics.effects';
+import {RootStacks} from '../../../Root';
+import {TabsScreens} from '../../../navigation/tabs/TabsStack';
+import {CoinbaseScreens} from '../../../navigation/coinbase/CoinbaseGroup';
 
 LogBox.ignoreLogs([
   'Non-serializable values were found in the navigation state',
@@ -84,7 +88,7 @@ const Row = styled.View`
   align-items: flex-end;
 `;
 
-const OverviewContainer = styled.View`
+const OverviewContainer = styled.SafeAreaView`
   flex: 1;
 `;
 
@@ -172,6 +176,7 @@ export const buildUIFormattedWallet: (
     currencyName,
     currencyAbbreviation,
     chain,
+    tokenAddress,
     network,
     walletName,
     balance,
@@ -192,7 +197,7 @@ export const buildUIFormattedWallet: (
   img,
   badgeImg,
   currencyName,
-  currencyAbbreviation: currencyAbbreviation.toUpperCase(),
+  currencyAbbreviation: formatCurrencyAbbreviation(currencyAbbreviation),
   chain,
   walletName: walletName || credentials.walletName,
   cryptoBalance: balance.crypto,
@@ -209,6 +214,7 @@ export const buildUIFormattedWallet: (
           currencyAbbreviation,
           chain,
           rates,
+          tokenAddress,
         ),
       ),
       hideWallet,
@@ -228,6 +234,7 @@ export const buildUIFormattedWallet: (
           currencyAbbreviation,
           chain,
           rates,
+          tokenAddress,
         ),
       ),
       hideWallet,
@@ -247,6 +254,7 @@ export const buildUIFormattedWallet: (
           currencyAbbreviation,
           chain,
           rates,
+          tokenAddress,
         ),
       ),
       hideWallet,
@@ -266,6 +274,7 @@ export const buildUIFormattedWallet: (
           currencyAbbreviation,
           chain,
           rates,
+          tokenAddress,
         ),
       ),
       hideWallet,
@@ -285,6 +294,7 @@ export const buildUIFormattedWallet: (
           currencyAbbreviation,
           chain,
           rates,
+          tokenAddress,
         ),
       ),
       hideWallet,
@@ -346,7 +356,7 @@ const KeyOverview = () => {
   const {t} = useTranslation();
   const {
     params: {id, context},
-  } = useRoute<RouteProp<WalletStackParamList, 'KeyOverview'>>();
+  } = useRoute<RouteProp<WalletGroupParamList, 'KeyOverview'>>();
   const navigation = useNavigation();
   const dispatch = useAppDispatch();
   const logger = useLogger();
@@ -412,14 +422,12 @@ const KeyOverview = () => {
               ) : null}
               {key?.methods?.isPrivKeyEncrypted() ? (
                 <CogIconContainer
-                  onPress={() =>
-                    navigation.navigate('Wallet', {
-                      screen: 'KeySettings',
-                      params: {
-                        key,
-                      },
-                    })
-                  }
+                  onPress={async () => {
+                    await sleep(500);
+                    navigation.navigate('KeySettings', {
+                      key,
+                    });
+                  }}
                   activeOpacity={ActiveOpacity}>
                   <Icons.Cog />
                 </CogIconContainer>
@@ -449,12 +457,9 @@ const KeyOverview = () => {
               err instanceof Error ? err.message : JSON.stringify(err);
             logger.error(`error [getStatus]: ${errStr}`);
           } else {
-            navigation.navigate('Wallet', {
-              screen: 'Copayers',
-              params: {
-                wallet: key?.wallets[0],
-                status: status?.wallet,
-              },
+            navigation.navigate('Copayers', {
+              wallet: key?.wallets[0],
+              status: status?.wallet,
             });
           }
         },
@@ -489,6 +494,21 @@ const KeyOverview = () => {
   const keyOptions: Array<Option> = [];
 
   if (!key?.methods?.isPrivKeyEncrypted()) {
+    keyOptions.push({
+      img: <Icons.Wallet width="15" height="15" />,
+      title: t('Add Wallet'),
+      description: t(
+        'Choose another currency you would like to add to your key.',
+      ),
+      onPress: async () => {
+        haptic('impactLight');
+        await sleep(500);
+        navigation.navigate('AddingOptions', {
+          key,
+        });
+      },
+    });
+
     if (!key?.isReadOnly) {
       keyOptions.push({
         img: <Icons.Encrypt />,
@@ -496,14 +516,11 @@ const KeyOverview = () => {
         description: t(
           'Prevent an unauthorized user from sending funds out of your wallet.',
         ),
-        onPress: () => {
+        onPress: async () => {
           haptic('impactLight');
-
-          navigation.navigate('Wallet', {
-            screen: 'CreateEncryptPassword',
-            params: {
-              key,
-            },
+          await sleep(500);
+          navigation.navigate('CreateEncryptPassword', {
+            key,
           });
         },
       });
@@ -513,13 +530,11 @@ const KeyOverview = () => {
       img: <Icons.Settings />,
       title: t('Key Settings'),
       description: t('View all the ways to manage and configure your key.'),
-      onPress: () => {
+      onPress: async () => {
         haptic('impactLight');
-        navigation.navigate('Wallet', {
-          screen: 'KeySettings',
-          params: {
-            key,
-          },
+        await sleep(500);
+        navigation.navigate('KeySettings', {
+          key,
         });
       },
     });
@@ -527,10 +542,7 @@ const KeyOverview = () => {
 
   const onPressTxpBadge = useMemo(
     () => () => {
-      navigation.navigate('Wallet', {
-        screen: 'TransactionProposalNotifications',
-        params: {keyId: key.id},
-      });
+      navigation.navigate('TransactionProposalNotifications', {keyId: key.id});
     },
     [],
   );
@@ -572,33 +584,24 @@ const KeyOverview = () => {
                   } else {
                     if (status?.wallet?.status === 'complete') {
                       fullWalletObj.openWallet({}, () => {
-                        navigation.navigate('Wallet', {
-                          screen: 'WalletDetails',
-                          params: {
-                            walletId: item.id,
-                            key,
-                          },
+                        navigation.navigate('WalletDetails', {
+                          walletId: item.id,
+                          key,
                         });
                       });
                       return;
                     }
-                    navigation.navigate('Wallet', {
-                      screen: 'Copayers',
-                      params: {
-                        wallet: fullWalletObj,
-                        status: status?.wallet,
-                      },
+                    navigation.navigate('Copayers', {
+                      wallet: fullWalletObj,
+                      status: status?.wallet,
                     });
                   }
                 },
               );
             } else {
-              navigation.navigate('Wallet', {
-                screen: 'WalletDetails',
-                params: {
-                  key,
-                  walletId: item.id,
-                },
+              navigation.navigate('WalletDetails', {
+                key,
+                walletId: item.id,
               });
             }
           }}
@@ -650,13 +653,10 @@ const KeyOverview = () => {
           return (
             <WalletListFooter
               activeOpacity={ActiveOpacity}
-              onPress={() => {
+              onPress={async () => {
                 haptic('impactLight');
-                navigation.navigate('Wallet', {
-                  screen: 'AddingOptions',
-                  params: {
-                    key,
-                  },
+                navigation.navigate('AddingOptions', {
+                  key,
                 });
               }}>
               <Icons.Add />
@@ -709,17 +709,15 @@ const KeyOverview = () => {
                   setShowKeyDropdown(false);
                   navigation.dispatch(
                     CommonActions.reset({
-                      index: 2,
+                      index: 1,
                       routes: [
                         {
-                          name: 'Tabs',
-                          params: {screen: 'Home'},
+                          name: RootStacks.TABS,
+                          params: {screen: TabsScreens.HOME},
                         },
                         {
-                          name: 'Coinbase',
-                          params: {
-                            screen: 'CoinbaseRoot',
-                          },
+                          name: CoinbaseScreens.ROOT,
+                          params: {},
                         },
                       ],
                     }),

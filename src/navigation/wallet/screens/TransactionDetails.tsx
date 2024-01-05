@@ -9,7 +9,7 @@ import {
 import React, {useEffect, useLayoutEffect, useState} from 'react';
 import {useNavigation, useRoute} from '@react-navigation/native';
 import {RouteProp} from '@react-navigation/core';
-import {WalletStackParamList} from '../WalletStack';
+import {WalletGroupParamList} from '../WalletGroup';
 import {useAppDispatch, useAppSelector} from '../../../utils/hooks';
 import {
   buildTransactionDetails,
@@ -73,7 +73,7 @@ import {DetailColumn, DetailContainer, DetailRow} from './send/confirm/Shared';
 import {LogActions} from '../../../store/log';
 import {RootState} from '../../../store';
 
-const TxsDetailsContainer = styled.View`
+const TxsDetailsContainer = styled.SafeAreaView`
   flex: 1;
 `;
 
@@ -202,7 +202,7 @@ const TimelineList = ({actions}: {actions: TxActions[]}) => {
 const TransactionDetails = () => {
   const {
     params: {transaction, wallet, onMemoChange},
-  } = useRoute<RouteProp<WalletStackParamList, 'TransactionDetails'>>();
+  } = useRoute<RouteProp<WalletGroupParamList, 'TransactionDetails'>>();
   const defaultAltCurrency = useAppSelector(({APP}) => APP.defaultAltCurrency);
   const contacts = useAppSelector(({CONTACT}: RootState) => CONTACT.list);
   const {t} = useTranslation();
@@ -216,6 +216,7 @@ const TransactionDetails = () => {
     currencyAbbreviation,
     network,
     chain,
+    tokenAddress,
     credentials: {walletId},
   } = wallet;
   currencyAbbreviation = currencyAbbreviation.toLowerCase();
@@ -280,7 +281,12 @@ const TransactionDetails = () => {
             address: output.toAddress,
             amount: Number(
               dispatch(
-                FormatAmount(currencyAbbreviation, chain, output.amount),
+                FormatAmount(
+                  currencyAbbreviation,
+                  chain,
+                  tokenAddress,
+                  output.amount,
+                ),
               ),
             ),
           });
@@ -292,7 +298,12 @@ const TransactionDetails = () => {
         context: 'fromReplaceByFee' as TransactionOptionsContext,
         amount: Number(
           dispatch(
-            FormatAmount(currencyAbbreviation, chain, transaction.amount),
+            FormatAmount(
+              currencyAbbreviation,
+              chain,
+              tokenAddress,
+              transaction.amount,
+            ),
           ),
         ),
         toAddress,
@@ -309,17 +320,14 @@ const TransactionDetails = () => {
         createProposalAndBuildTxDetails(tx),
       );
 
-      navigation.navigate('Wallet', {
-        screen: 'Confirm',
-        params: {
-          wallet,
-          recipient,
-          recipientList,
-          txp: newTxp,
-          txDetails,
-          amount: tx.amount,
-          speedup: true,
-        },
+      navigation.navigate('Confirm', {
+        wallet,
+        recipient,
+        recipientList,
+        txp: newTxp,
+        txDetails,
+        amount: tx.amount,
+        speedup: true,
       });
     } catch (err: any) {
       const [errorMessageConfig] = await Promise.all([
@@ -362,9 +370,7 @@ const TransactionDetails = () => {
   }, [copied]);
 
   const goToBlockchain = () => {
-    let url = dispatch(
-      GetBlockExplorerUrl(currencyAbbreviation, network, chain),
-    );
+    let url = GetBlockExplorerUrl(network, chain);
     switch (currencyAbbreviation) {
       case 'doge':
         url =
@@ -407,7 +413,7 @@ const TransactionDetails = () => {
               <H2 medium={true}>{txs.amountStr}</H2>
             ) : null}
 
-            {!IsCustomERCToken(currencyAbbreviation, chain) ? (
+            {!IsCustomERCToken(tokenAddress, chain) ? (
               <SubTitle>
                 {!txs.fiatRateStr
                   ? '...'
@@ -494,7 +500,11 @@ const TransactionDetails = () => {
                       <H7>
                         {txs.feeFiatStr}{' '}
                         {txs.feeRateStr
-                          ? '(' + txs.feeRateStr + ' of total amount)'
+                          ? '(' +
+                            txs.feeRateStr +
+                            ' ' +
+                            t('of total amount') +
+                            ')'
                           : null}
                       </H7>
                     ) : (
@@ -510,7 +520,9 @@ const TransactionDetails = () => {
             </>
           ) : null}
 
-          {IsSent(txs.action) ? <MultipleOutputsTx tx={txs} /> : null}
+          {IsSent(txs.action) ? (
+            <MultipleOutputsTx tx={txs} tokenAddress={wallet.tokenAddress} />
+          ) : null}
 
           {txs.creatorName && IsShared(wallet) ? (
             <>
